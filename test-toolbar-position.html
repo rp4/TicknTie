@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Toolbar Position</title>
+    <link rel="stylesheet" href="src/css/styles.css">
+    <style>
+        /* Add visual debugging aids */
+        .debug-line {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(to right, red 50%, blue 50%);
+            z-index: 100000;
+            pointer-events: none;
+        }
+
+        .debug-info {
+            position: fixed;
+            top: 50px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border: 2px solid #333;
+            border-radius: 5px;
+            font-family: monospace;
+            z-index: 100001;
+            max-width: 400px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Debug line to show absolute top of viewport -->
+    <div class="debug-line"></div>
+
+    <!-- Format Toolbar (copied from index.html) -->
+    <div class="format-toolbar">
+        <label for="imageInput" class="format-button" style="background: #27ae60; color: white; cursor: pointer; padding: 5px 12px;" title="Add Image">
+            🖼️ Add Image
+        </label>
+
+        <div class="toolbar-separator" style="height: 20px;"></div>
+
+        <button class="format-button" title="Bold">
+            <strong>B</strong>
+        </button>
+        <button class="format-button" title="Italic">
+            <em>I</em>
+        </button>
+        <button class="format-button" title="Underline">
+            <u>U</u>
+        </button>
+    </div>
+
+    <!-- Debug information panel -->
+    <div class="debug-info">
+        <h3>Toolbar Position Debug</h3>
+        <div id="debugOutput"></div>
+    </div>
+
+    <script>
+        window.addEventListener('load', function() {
+            const toolbar = document.querySelector('.format-toolbar');
+            const debugOutput = document.getElementById('debugOutput');
+
+            if (toolbar) {
+                const rect = toolbar.getBoundingClientRect();
+                const computedStyle = window.getComputedStyle(toolbar);
+                const bodyStyle = window.getComputedStyle(document.body);
+                const htmlStyle = window.getComputedStyle(document.documentElement);
+
+                const info = {
+                    'Toolbar top (getBoundingClientRect)': rect.top + 'px',
+                    'Toolbar computed top': computedStyle.top,
+                    'Toolbar computed margin-top': computedStyle.marginTop,
+                    'Toolbar computed transform': computedStyle.transform,
+                    'Toolbar offsetTop': toolbar.offsetTop + 'px',
+                    'Body margin': bodyStyle.margin,
+                    'Body padding': bodyStyle.padding,
+                    'HTML margin': htmlStyle.margin,
+                    'HTML padding': htmlStyle.padding,
+                    'First body child': document.body.firstElementChild ? document.body.firstElementChild.tagName : 'none'
+                };
+
+                let html = '<table style="width: 100%; font-size: 12px;">';
+                for (const [key, value] of Object.entries(info)) {
+                    const isGood = (key.includes('top') && value === '0px') ||
+                                  (key.includes('margin') && value.includes('0px')) ||
+                                  (key.includes('padding') && value.includes('0px'));
+                    const color = isGood ? 'green' : (value === '0px' ? 'green' : 'orange');
+                    html += `<tr>
+                        <td style="padding: 3px; font-weight: bold;">${key}:</td>
+                        <td style="padding: 3px; color: ${color};">${value}</td>
+                    </tr>`;
+                }
+                html += '</table>';
+
+                if (rect.top === 0) {
+                    html += '<p style="color: green; font-weight: bold; margin-top: 10px;">✓ Toolbar is flush with top!</p>';
+                } else {
+                    html += `<p style="color: red; font-weight: bold; margin-top: 10px;">✗ Gap detected: ${rect.top}px from top</p>`;
+                }
+
+                debugOutput.innerHTML = html;
+            }
+        });
+    </script>
+</body>
+</html>
