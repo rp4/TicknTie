@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TicknTie - Excel Audit Workpaper Tool</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕵️</text></svg>">
+    
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <!-- Application Styles -->
+    <link rel="stylesheet" href="css/styles.css">
+
+    <!-- Critical inline styles to ensure toolbar is at top -->
+    <style>
+        /* Emergency reset to ensure no gap at top */
+        html, body { margin: 0 !important; padding: 0 !important; }
+        body::before { display: none !important; }
+        .format-toolbar { position: fixed !important; top: 0 !important; margin-top: 0 !important; }
+    </style>
+</head>
+<body><!-- Format Toolbar --><div class="format-toolbar">
+        <label for="imageInput" class="format-button" style="background: #27ae60; color: white; cursor: pointer; padding: 5px 12px;" title="Add Image">
+            🖼️ Add Image
+        </label>
+
+        <div class="toolbar-separator" style="height: 20px;"></div>
+        
+        <button class="format-button" onclick="toggleFormat('bold')" title="Bold">
+            <strong>B</strong>
+        </button>
+        <button class="format-button" onclick="toggleFormat('italic')" title="Italic">
+            <em>I</em>
+        </button>
+        <button class="format-button" onclick="toggleFormat('underline')" title="Underline">
+            <u>U</u>
+        </button>
+        
+        <div class="toolbar-separator" style="height: 20px;"></div>
+        
+        <button class="format-button" onclick="setAlignment('left')" title="Align Left">
+            ⬅️
+        </button>
+        <button class="format-button" onclick="setAlignment('center')" title="Align Center">
+            ↔️
+        </button>
+        <button class="format-button" onclick="setAlignment('right')" title="Align Right">
+            ➡️
+        </button>
+        
+        <div class="toolbar-separator" style="height: 20px;"></div>
+        
+        <select class="format-button" onchange="setFontSize(this.value)" style="width: 80px;">
+            <option value="11">11pt</option>
+            <option value="12" selected>12pt</option>
+            <option value="14">14pt</option>
+            <option value="16">16pt</option>
+            <option value="18">18pt</option>
+        </select>
+
+        <input type="color" class="format-button" onchange="setTextColor(this.value)" title="Text Color" style="width: 40px;">
+        <input type="color" class="format-button" onchange="setCellBackground(this.value)" title="Background Color" style="width: 40px;">
+
+        <div style="margin-left: auto; padding-right: 10px;">
+            <button onclick="TicknTieApp.exportZipBundle()" style="background: #27ae60; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-size: 13px;">
+                📦 Export as Zip
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="content-area">
+        <!-- Spreadsheet Container -->
+        <div class="spreadsheet-container">
+            <div class="formula-bar">
+                <div class="cell-ref" id="cellRef">A1</div>
+                <input type="text" class="formula-input" id="formulaBar" placeholder="Enter value or formula">
+            </div>
+            
+            <!-- Initial Upload Area -->
+            <div id="uploadArea" class="upload-area">
+                <div class="upload-icon">📊</div>
+                <div class="upload-text">Drop files here or click to browse</div>
+                <div class="upload-subtext">
+                    Supports Excel files (.xlsx, .xls) or Zip bundles with images
+                    <span class="zip-indicator">ZIP</span>
+                </div>
+            </div>
+            
+            <!-- Spreadsheet will be inserted here -->
+            <div id="spreadsheetContent" style="display: none;"></div>
+        </div>
+
+        <!-- Enhanced Image Panel -->
+        <div class="image-panel" id="imagePanel">
+            <button class="image-panel-toggle" onclick="UIComponents.toggleImagePanel()">
+                <span id="imagePanelToggleIcon">◀</span>
+            </button>
+            
+            <div class="image-panel-header">
+                <div class="image-panel-title">Image Viewer</div>
+                <div class="image-panel-info" id="imagePanelInfo">0 images</div>
+            </div>
+            
+            <div class="image-panel-tabs">
+                <button class="image-panel-tab active" onclick="UIComponents.switchPanelTab('preview')">
+                    Preview
+                </button>
+                <button class="image-panel-tab" onclick="UIComponents.switchPanelTab('gallery')">
+                    Gallery
+                </button>
+            </div>
+            
+            <div class="image-panel-content" id="imagePanelContent">
+                <div style="text-align: center; padding: 40px; color: #95a5a6;">
+                    <div style="font-size: 48px; margin-bottom: 15px;">🖼️</div>
+                    <div>No images loaded</div>
+                    <div style="font-size: 12px; margin-top: 10px;">
+                        Upload Excel with images or add images to cells
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sheet Tabs at Bottom -->
+    <div class="sheet-tabs-container">
+        <div class="sheet-tabs" id="sheetTabs">
+            <div class="sheet-tab active" onclick="TicknTieApp.switchSheet(0)">Sheet1</div>
+            <button class="sheet-tab" style="min-width: 30px;" onclick="TicknTieApp.addNewSheet()">+</button>
+        </div>
+    </div>
+    
+    <!-- Hidden file inputs (moved to end of body to avoid layout issues) -->
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.xlsm,.xlsb" style="display: none;">
+    <input type="file" id="zipInput" accept=".zip" style="display: none;">
+    <input type="file" id="imageInput" accept="image/*" multiple style="display: none;">
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <div class="status-item">
+            <span id="statusText">Ready</span>
+        </div>
+        <div class="status-item">
+            <span id="cellCount">0 cells</span> | 
+            <span id="selectedCell">No selection</span>
+        </div>
+    </div>
+
+    <!-- Image Modal for Full View -->
+    <div class="image-modal" id="imageModal" onclick="TicknTieApp.closeImageModal()">
+        <span class="image-modal-close">&times;</span>
+        <img id="modalImage" src="" alt="">
+    </div>
+
+    <!-- Loading Spinner -->
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Application Scripts -->
+    <script src="js/image-manager.js"></script>
+    <script src="js/excel-handler.js"></script>
+    <script src="js/zip-handler.js"></script>
+    <script src="js/ui-components.js"></script>
+    <script src="js/app.js"></script>
+    
+    <!-- Formatting functions (temporary - should move to modules) -->
+    <script>
+        // Temporary formatting functions - these should be moved to ui-components.js
+        function toggleFormat(format) {
+            if (!window.uiComponents.currentCell) return;
+            
+            const input = document.querySelector(`input[data-cell="${window.uiComponents.currentCell}"]`);
+            if (!input) return;
+            
+            switch(format) {
+                case 'bold':
+                    input.style.fontWeight = input.style.fontWeight === 'bold' ? 'normal' : 'bold';
+                    break;
+                case 'italic':
+                    input.style.fontStyle = input.style.fontStyle === 'italic' ? 'normal' : 'italic';
+                    break;
+                case 'underline':
+                    input.style.textDecoration = input.style.textDecoration === 'underline' ? 'none' : 'underline';
+                    break;
+            }
+        }
+        
+        function setAlignment(align) {
+            if (!window.uiComponents.currentCell) return;
+            
+            const input = document.querySelector(`input[data-cell="${window.uiComponents.currentCell}"]`);
+            if (input) {
+                input.style.textAlign = align;
+            }
+        }
+        
+        function setFontSize(size) {
+            if (!window.uiComponents.currentCell) return;
+            
+            const input = document.querySelector(`input[data-cell="${window.uiComponents.currentCell}"]`);
+            if (input) {
+                input.style.fontSize = size + 'px';
+            }
+        }
+        
+        function setTextColor(color) {
+            if (!window.uiComponents.currentCell) return;
+            
+            const input = document.querySelector(`input[data-cell="${window.uiComponents.currentCell}"]`);
+            if (input) {
+                input.style.color = color;
+            }
+        }
+        
+        function setCellBackground(color) {
+            if (!window.uiComponents.currentCell) return;
+            
+            const input = document.querySelector(`input[data-cell="${window.uiComponents.currentCell}"]`);
+            if (input) {
+                input.style.backgroundColor = color;
+            }
+        }
+    </script>
+</body>
+</html>

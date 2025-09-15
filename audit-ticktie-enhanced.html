@@ -889,6 +889,12 @@
             initializeEmptySpreadsheet();
             setupKeyboardNavigation();
             
+            // Initialize sidebar toggle button - always show right arrow when expanded
+            const icon = document.getElementById('sidebarToggleIcon');
+            if (icon) {
+                icon.textContent = '▶';
+            }
+            
             // Show welcome modal if no data exists
             checkAndShowWelcomeModal();
         });
@@ -1767,18 +1773,14 @@
 
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
-            const icon = document.getElementById('sidebarToggleIcon');
             const toggleBtn = document.querySelector('.sidebar-toggle');
             
+            // Toggle the collapsed state
             sidebar.classList.toggle('collapsed');
             
+            // Hide button when collapsed
             if (sidebar.classList.contains('collapsed')) {
-                // Hide button when collapsed
                 toggleBtn.style.display = 'none';
-            } else {
-                // Show button with right arrow when expanded
-                toggleBtn.style.display = 'flex';
-                icon.textContent = '▶';
             }
         }
 

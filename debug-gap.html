@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Gap Issue</title>
+    <style>
+        /* Reset everything */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+        }
+
+        /* Test toolbar with absolute positioning to ensure it's at the very top */
+        .test-toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background: red;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+        }
+
+        /* Add a reference line to see if there's any gap */
+        .reference-line {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: blue;
+            z-index: 10001;
+        }
+    </style>
+</head>
+<body>
+    <!-- Reference line at absolute top -->
+    <div class="reference-line"></div>
+
+    <!-- Test toolbar -->
+    <div class="test-toolbar">
+        This toolbar should be flush with the top (red bar with blue line at very top)
+    </div>
+
+    <div style="margin-top: 50px; padding: 20px;">
+        <h2>Debug Information:</h2>
+        <p>If you see any gap between the blue line and the top of the browser window, there's an issue.</p>
+        <p>The red toolbar should be directly under the blue line with no gap.</p>
+    </div>
+
+    <script>
+        // Check for any computed styles that might cause issues
+        window.onload = function() {
+            const toolbar = document.querySelector('.test-toolbar');
+            const computedStyle = window.getComputedStyle(toolbar);
+            const bodyStyle = window.getComputedStyle(document.body);
+            const htmlStyle = window.getComputedStyle(document.documentElement);
+
+            console.log('Toolbar computed top:', computedStyle.top);
+            console.log('Toolbar computed margin-top:', computedStyle.marginTop);
+            console.log('Body margin:', bodyStyle.margin);
+            console.log('Body padding:', bodyStyle.padding);
+            console.log('HTML margin:', htmlStyle.margin);
+            console.log('HTML padding:', htmlStyle.padding);
+            console.log('Toolbar offsetTop:', toolbar.offsetTop);
+            console.log('Document.body.offsetTop:', document.body.offsetTop);
+        };
+    </script>
+</body>
+</html>
