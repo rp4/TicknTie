@@ -83,11 +83,13 @@ class ExcelHandler {
                 style: cell.s
             };
             
-            // Check if this is an image reference
-            if (typeof cell.v === 'string' && cell.v.startsWith('=IMAGE(')) {
-                const imageId = this.extractImageId(cell.v);
-                if (imageId) {
+            // Check if this is a hyperlink to an image
+            if (worksheet[cellRef + '!l'] && worksheet[cellRef + '!l'].Target) {
+                const target = worksheet[cellRef + '!l'].Target;
+                if (this.isImagePath(target)) {
+                    const imageId = target.split('/').pop();
                     cells[cellRef].imageRef = imageId;
+                    cells[cellRef].hyperlink = target;
                 }
             }
             
@@ -110,11 +112,11 @@ class ExcelHandler {
     }
 
     /**
-     * Extract image ID from Excel IMAGE function
+     * Check if a path is an image path
      */
-    extractImageId(formula) {
-        const match = formula.match(/=IMAGE\("([^"]+)"\)/);
-        return match ? match[1] : null;
+    isImagePath(path) {
+        const ext = path.split('.').pop().toLowerCase();
+        return ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'webp'].includes(ext);
     }
 
     /**
@@ -186,22 +188,25 @@ class ExcelHandler {
             this.sheets[sheetIndex].data[cellRef] = {};
         }
         
-        // Check if this is an image reference
-        if (value && value.startsWith('=IMAGE(')) {
-            const imageId = this.extractImageId(value);
-            this.sheets[sheetIndex].data[cellRef].imageRef = imageId;
-        } else {
-            delete this.sheets[sheetIndex].data[cellRef].imageRef;
-        }
+        // Note: Image references are now handled via hyperlinks, not cell values
         
         this.sheets[sheetIndex].data[cellRef].value = value;
     }
 
     /**
-     * Set image reference for a cell
+     * Set image hyperlink for a cell
      */
     setCellImageRef(sheetIndex, cellRef, imageId) {
-        this.updateCellValue(sheetIndex, cellRef, `=IMAGE("${imageId}")`);
+        if (!this.sheets[sheetIndex]) return;
+
+        if (!this.sheets[sheetIndex].data[cellRef]) {
+            this.sheets[sheetIndex].data[cellRef] = {};
+        }
+
+        // Store as hyperlink reference
+        this.sheets[sheetIndex].data[cellRef].imageRef = imageId;
+        this.sheets[sheetIndex].data[cellRef].hyperlink = `images/${imageId}`;
+        this.sheets[sheetIndex].data[cellRef].value = imageId; // Display filename in cell
     }
 
     /**
@@ -239,10 +244,15 @@ class ExcelHandler {
                 cell.f = cellData.formula;
             }
             
-            // Add image reference as formula
+            // Add hyperlink to image if present
             if (cellData.imageRef) {
-                cell.v = `=IMAGE("${cellData.imageRef}")`;
+                cell.v = cellData.imageRef; // Display filename
                 cell.t = 's';
+                // Add hyperlink
+                cell.l = {
+                    Target: `images/${cellData.imageRef}`,
+                    Tooltip: `Image: ${cellData.imageRef}`
+                };
             }
             
             ws[cellRef] = cell;

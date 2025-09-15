@@ -36,17 +36,25 @@
             width: 100%;
             max-width: 42rem;
             padding: 3rem;
-            border: 2px dashed #d1d5db;
+            border: 2px dashed rgba(255, 255, 255, 0.4);
             border-radius: 1rem;
             transition: all 0.3s ease;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            background: rgba(255, 255, 255, 0.45);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow:
+                0 20px 25px -5px rgba(0, 0, 0, 0.2),
+                0 10px 10px -5px rgba(0, 0, 0, 0.1),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.3);
         }
 
         .landing-container.drag-hover {
             border-color: #5b21b6;
-            background: rgba(139, 92, 246, 0.1);
+            background: rgba(139, 92, 246, 0.2);
+            box-shadow:
+                0 20px 25px -5px rgba(139, 92, 246, 0.3),
+                0 10px 10px -5px rgba(0, 0, 0, 0.1),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.4);
         }
 
         .title-section {
@@ -69,9 +77,137 @@
             font-size: 3.75rem;
         }
 
+        .subtitle-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+        }
+
         .subtitle {
             font-size: 1.25rem;
             color: #4b5563;
+            margin: 0;
+        }
+
+        .info-button {
+            background: none;
+            border: none;
+            cursor: help;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #4b5563;
+            transition: color 0.2s;
+        }
+
+        .info-button:hover {
+            color: #1f2937;
+        }
+
+        .info-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: min(90vw, 500px);
+            width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            background: rgba(249, 250, 251, 0.98);
+            backdrop-filter: blur(10px);
+            border-radius: 0.75rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            border: 1px solid #e5e7eb;
+            padding: 2rem;
+            z-index: 10000;
+        }
+
+        .popup-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .popup-icon-container {
+            width: 3rem;
+            height: 3rem;
+            background: #dbeafe;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .popup-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #111827;
+            margin: 0;
+        }
+
+        .popup-section {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .popup-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .section-icon {
+            width: 2.5rem;
+            height: 2.5rem;
+            background: #e5e7eb;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-top: 0.25rem;
+        }
+
+        .section-content {
+            flex: 1;
+        }
+
+        .section-content h4 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #111827;
+            margin: 0 0 0.5rem 0;
+        }
+
+        .section-content p {
+            color: #6b7280;
+            margin: 0 0 0.5rem 0;
+            line-height: 1.5;
+        }
+
+        .section-content ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .section-content li {
+            color: #6b7280;
+            margin-bottom: 0.5rem;
+            padding-left: 1.25rem;
+            position: relative;
+        }
+
+        .section-content li:before {
+            content: '•';
+            position: absolute;
+            left: 0;
         }
 
         .actions {
@@ -189,9 +325,62 @@
             <div class="title-section">
                 <h2 class="title">
                     <span class="icon">🕵️</span>
-                    TicknTie
+                    Tick n Tie
                 </h2>
-                <p class="subtitle">Excel Audit Workpaper Tool</p>
+                <div class="subtitle-container">
+                    <p class="subtitle">Evidence organization, completely private</p>
+                    <button class="info-button" id="privacyInfoBtn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Privacy Info Popup -->
+            <div class="info-popup" id="privacyPopup" style="display: none;">
+                <div class="popup-header">
+                    <div class="popup-icon-container">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                    </div>
+                    <h3 class="popup-title">Your Privacy Matters</h3>
+                </div>
+
+                <div class="popup-section">
+                    <div class="section-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                            <path d="M7 11V7a5 5 0 0110 0v4"/>
+                        </svg>
+                    </div>
+                    <div class="section-content">
+                        <h4>Local Processing Only</h4>
+                        <p>All processing happens in your browser. Your data never leaves your device unless you explicitly export it.</p>
+                    </div>
+                </div>
+
+                <div class="popup-section">
+                    <div class="section-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2">
+                            <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                        </svg>
+                    </div>
+                    <div class="section-content">
+                        <h4>No Data Collection</h4>
+                        <ul>
+                            <li>No tracking or analytics</li>
+                            <li>No cookies or local storage</li>
+                            <li>No server uploads</li>
+                            <li>Complete privacy</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
 
             <!-- Hidden file input -->
@@ -200,22 +389,10 @@
             <!-- Action buttons -->
             <div class="actions">
                 <label for="landing-zip-input" class="action-button primary">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                        <polyline points="17 8 12 3 7 8"/>
-                        <line x1="12" y1="3" x2="12" y2="15"/>
-                    </svg>
-                    Upload Zip Folder
+                    Choose Zip Folder
                 </label>
 
                 <button class="action-button secondary" onclick="loadSampleData()">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                        <polyline points="10 9 9 9 8 9"/>
-                    </svg>
                     Try Sample Data
                 </button>
             </div>
@@ -317,6 +494,30 @@
             };
             reader.readAsDataURL(file);
         }
+
+        // Privacy popup handling
+        const privacyBtn = document.getElementById('privacyInfoBtn');
+        const privacyPopup = document.getElementById('privacyPopup');
+        let popupTimeout;
+
+        privacyBtn.addEventListener('mouseenter', () => {
+            clearTimeout(popupTimeout);
+            privacyPopup.style.display = 'block';
+        });
+
+        privacyBtn.addEventListener('mouseleave', () => {
+            popupTimeout = setTimeout(() => {
+                privacyPopup.style.display = 'none';
+            }, 300);
+        });
+
+        privacyPopup.addEventListener('mouseenter', () => {
+            clearTimeout(popupTimeout);
+        });
+
+        privacyPopup.addEventListener('mouseleave', () => {
+            privacyPopup.style.display = 'none';
+        });
 
         // Load sample data
         function loadSampleData() {
