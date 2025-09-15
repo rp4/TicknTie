@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Hyperlinks in TicknTie</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #output {
+            white-space: pre-wrap;
+            font-family: monospace;
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+    <h1>TicknTie Hyperlink Test</h1>
+
+    <div class="test-section">
+        <h2>Test 1: Create Excel with Hyperlinks</h2>
+        <button onclick="createTestExcel()">Create Test Excel</button>
+        <div id="create-status"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Create Zip Bundle with Images</h2>
+        <button onclick="createTestZip()">Create Test Zip</button>
+        <div id="zip-status"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 3: Read Excel and Check Hyperlinks</h2>
+        <input type="file" id="excel-input" accept=".xlsx">
+        <button onclick="readExcel()">Read Excel</button>
+        <div id="read-status"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Output</h2>
+        <div id="output"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const timestamp = new Date().toLocaleTimeString();
+            output.innerHTML += `[${timestamp}] ${message}\n`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        async function createTestExcel() {
+            try {
+                const status = document.getElementById('create-status');
+                status.className = 'status info';
+                status.textContent = 'Creating Excel with hyperlinks...';
+
+                // Create workbook
+                const wb = XLSX.utils.book_new();
+
+                // Create worksheet data
+                const wsData = [
+                    ['Item', 'Image Reference', 'Notes'],
+                    ['Product 1', 'image1.png', 'Sample product'],
+                    ['Product 2', 'image2.jpg', 'Another product'],
+                    ['Product 3', 'photo3.png', 'Third product']
+                ];
+
+                const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+                // Add hyperlinks to image cells
+                ws['B2'] = {
+                    v: 'image1.png',
+                    t: 's',
+                    l: {
+                        Target: 'images/image1.png',
+                        Tooltip: 'Image: image1.png'
+                    }
+                };
+
+                ws['B3'] = {
+                    v: 'image2.jpg',
+                    t: 's',
+                    l: {
+                        Target: 'images/image2.jpg',
+                        Tooltip: 'Image: image2.jpg'
+                    }
+                };
+
+                ws['B4'] = {
+                    v: 'photo3.png',
+                    t: 's',
+                    l: {
+                        Target: 'images/photo3.png',
+                        Tooltip: 'Image: photo3.png'
+                    }
+                };
+
+                XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+
+                // Write file
+                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                const blob = new Blob([wbout], { type: 'application/octet-stream' });
+
+                // Download
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'test-hyperlinks.xlsx';
+                a.click();
+                URL.revokeObjectURL(url);
+
+                status.className = 'status success';
+                status.textContent = 'Excel created successfully with hyperlinks!';
+                log('Created Excel with hyperlinks to images/image1.png, images/image2.jpg, images/photo3.png');
+            } catch (error) {
+                const status = document.getElementById('create-status');
+                status.className = 'status error';
+                status.textContent = 'Error: ' + error.message;
+                log('Error creating Excel: ' + error.message, 'error');
+            }
+        }
+
+        async function createTestZip() {
+            try {
+                const status = document.getElementById('zip-status');
+                status.className = 'status info';
+                status.textContent = 'Creating zip bundle...';
+
+                const zip = new JSZip();
+
+                // Create Excel with hyperlinks
+                const wb = XLSX.utils.book_new();
+                const wsData = [
+                    ['Item', 'Image', 'Notes'],
+                    ['Item 1', 'img1.png', 'First item'],
+                    ['Item 2', 'img2.png', 'Second item']
+                ];
+
+                const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+                // Add hyperlinks
+                ws['B2'] = {
+                    v: 'img1.png',
+                    t: 's',
+                    l: { Target: 'images/img1.png', Tooltip: 'Image: img1.png' }
+                };
+                ws['B3'] = {
+                    v: 'img2.png',
+                    t: 's',
+                    l: { Target: 'images/img2.png', Tooltip: 'Image: img2.png' }
+                };
+
+                XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+                const xlsxData = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+
+                // Add to zip
+                zip.file('workbook.xlsx', xlsxData);
+
+                // Create dummy images (1x1 pixel PNGs)
+                const imgData = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+                const imgBlob = await fetch('data:image/png;base64,' + imgData).then(r => r.blob());
+
+                const imagesFolder = zip.folder('images');
+                imagesFolder.file('img1.png', imgBlob);
+                imagesFolder.file('img2.png', imgBlob);
+
+                // Create mappings.json
+                const mappings = {
+                    version: '1.0',
+                    cellMappings: {
+                        'B2': 'img1.png',
+                        'B3': 'img2.png'
+                    }
+                };
+                zip.file('mappings.json', JSON.stringify(mappings, null, 2));
+
+                // Generate zip
+                const zipBlob = await zip.generateAsync({ type: 'blob' });
+
+                // Download
+                const url = URL.createObjectURL(zipBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'test-bundle.zip';
+                a.click();
+                URL.revokeObjectURL(url);
+
+                status.className = 'status success';
+                status.textContent = 'Zip bundle created successfully!';
+                log('Created zip bundle with Excel (hyperlinks) and images folder');
+            } catch (error) {
+                const status = document.getElementById('zip-status');
+                status.className = 'status error';
+                status.textContent = 'Error: ' + error.message;
+                log('Error creating zip: ' + error.message, 'error');
+            }
+        }
+
+        async function readExcel() {
+            try {
+                const status = document.getElementById('read-status');
+                const input = document.getElementById('excel-input');
+
+                if (!input.files[0]) {
+                    status.className = 'status error';
+                    status.textContent = 'Please select a file first';
+                    return;
+                }
+
+                status.className = 'status info';
+                status.textContent = 'Reading Excel file...';
+
+                const file = input.files[0];
+                const data = await file.arrayBuffer();
+                const workbook = XLSX.read(data, { type: 'array' });
+
+                log('\n=== Excel File Analysis ===');
+                log('Filename: ' + file.name);
+                log('Sheets: ' + workbook.SheetNames.join(', '));
+
+                // Check first sheet for hyperlinks
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                let hyperlinkCount = 0;
+                const hyperlinks = [];
+
+                for (const cellRef in firstSheet) {
+                    if (cellRef[0] === '!') continue;
+
+                    const cell = firstSheet[cellRef];
+                    // Check for hyperlink
+                    if (cell.l && cell.l.Target) {
+                        hyperlinkCount++;
+                        hyperlinks.push({
+                            cell: cellRef,
+                            value: cell.v,
+                            target: cell.l.Target,
+                            tooltip: cell.l.Tooltip || ''
+                        });
+                    }
+
+                    // Also check for old-style sheet hyperlinks
+                    if (firstSheet[cellRef + '!l']) {
+                        const link = firstSheet[cellRef + '!l'];
+                        log(`Found sheet link at ${cellRef}: ${JSON.stringify(link)}`);
+                    }
+                }
+
+                log(`\nFound ${hyperlinkCount} hyperlinks:`);
+                hyperlinks.forEach(link => {
+                    log(`  Cell ${link.cell}: "${link.value}" -> ${link.target}`);
+                });
+
+                status.className = 'status success';
+                status.textContent = `Excel read successfully! Found ${hyperlinkCount} hyperlinks.`;
+
+            } catch (error) {
+                const status = document.getElementById('read-status');
+                status.className = 'status error';
+                status.textContent = 'Error: ' + error.message;
+                log('Error reading Excel: ' + error.message, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

@@ -10,13 +10,14 @@
     {
       "source": "/index",
       "destination": "/landing.html"
-    }
-  ],
-  "redirects": [
+    },
     {
       "source": "/index.html",
-      "destination": "/landing.html",
-      "permanent": false
+      "destination": "/landing.html"
+    },
+    {
+      "source": "/app",
+      "destination": "/app.html"
     }
   ],
   "headers": [
