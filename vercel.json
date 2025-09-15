@@ -6,6 +6,17 @@
     {
       "source": "/",
       "destination": "/landing.html"
+    },
+    {
+      "source": "/index",
+      "destination": "/landing.html"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/index.html",
+      "destination": "/landing.html",
+      "permanent": false
     }
   ],
   "headers": [
