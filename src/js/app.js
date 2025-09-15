@@ -7,6 +7,11 @@ class TicknTieApp {
     constructor() {
         this.initialized = false;
         this.currentFile = null;
+        // Column and row sizes
+        this.columnWidths = {}; // Store custom column widths
+        this.rowHeights = {}; // Store custom row heights
+        this.defaultColumnWidth = 100;
+        this.defaultRowHeight = 30;
     }
 
     /**
@@ -26,6 +31,9 @@ class TicknTieApp {
         // Initialize with empty spreadsheet if no data was loaded
         if (!window.ExcelHandler.sheets || window.ExcelHandler.sheets.length === 0) {
             this.initializeEmptySpreadsheet();
+        } else {
+            // If sheets exist but tabs haven't been updated, update them
+            this.updateSheetTabs();
         }
 
         // Render UI components
@@ -177,19 +185,22 @@ class TicknTieApp {
     initializeEmptySpreadsheet() {
         // Create default sheet
         window.ExcelHandler.createNewSheet('Sheet1');
-        
+
         // Render the sheet
         const container = document.getElementById('spreadsheetContent');
         const uploadArea = document.getElementById('uploadArea');
-        
+
         if (container && uploadArea) {
             uploadArea.style.display = 'none';
             container.style.display = 'block';
-            
+
             const sheet = window.ExcelHandler.getCurrentSheet();
             window.uiComponents.renderSheet(sheet, container);
         }
-        
+
+        // Update sheet tabs
+        this.updateSheetTabs();
+
         window.uiComponents.updateStatusBar('Ready');
     }
 
@@ -287,24 +298,44 @@ class TicknTieApp {
      */
     async loadExcelFile(file) {
         window.uiComponents.showLoading();
-        
+
         try {
             await window.ExcelHandler.loadExcelFile(file);
             this.currentFile = file.name;
-            
+
+            // Process cells with image references (hyperlinks)
+            const sheets = window.ExcelHandler.sheets;
+            for (let sheetIndex = 0; sheetIndex < sheets.length; sheetIndex++) {
+                const sheet = sheets[sheetIndex];
+                for (const cellRef in sheet.data) {
+                    const cellData = sheet.data[cellRef];
+                    // If cell has an imageRef from hyperlink, try to link it
+                    if (cellData.imageRef) {
+                        try {
+                            // Check if image exists in store
+                            if (window.ImageManager.getImageData(cellData.imageRef)) {
+                                window.ImageManager.linkImageToCell(cellRef, cellData.imageRef);
+                            }
+                        } catch (e) {
+                            // Image not in store yet, will be loaded from zip
+                        }
+                    }
+                }
+            }
+
             // Hide upload area and show spreadsheet
             const container = document.getElementById('spreadsheetContent');
             const uploadArea = document.getElementById('uploadArea');
-            
+
             if (container && uploadArea) {
                 uploadArea.style.display = 'none';
                 container.style.display = 'block';
             }
-            
+
             // Render first sheet
             this.refreshCurrentSheet();
             this.updateSheetTabs();
-            
+
             window.uiComponents.updateStatusBar(`Loaded: ${file.name}`);
         } catch (error) {
             console.error('Error loading Excel file:', error);
@@ -319,34 +350,44 @@ class TicknTieApp {
      */
     async loadZipFile(file) {
         window.uiComponents.showLoading();
-        
+
         try {
             const result = await window.ZipHandler.loadZipFile(file);
-            
+
             if (!result.excelFile) {
                 throw new Error('No Excel file found in zip');
             }
-            
-            // Load Excel file
-            await this.loadExcelFile(result.excelFile);
-            
-            // Import images
+
+            // Import images first
             if (result.imageFiles && Object.keys(result.imageFiles).length > 0) {
-                const imageMappings = await window.ImageManager.importImages(result.imageFiles);
-                
-                // Apply mappings to cells if provided
-                if (result.imageMappings) {
-                    for (const [cellRef, originalImageId] of Object.entries(result.imageMappings)) {
-                        const newImageId = imageMappings[originalImageId];
-                        if (newImageId) {
-                            window.ImageManager.linkImageToCell(cellRef, newImageId);
-                        }
+                await window.ImageManager.importImages(result.imageFiles);
+            }
+
+            // Load Excel file (this will now properly map hyperlinks to images)
+            await this.loadExcelFile(result.excelFile);
+
+            // Apply additional mappings if provided in mappings.json
+            if (result.imageMappings) {
+                for (const [cellRef, imageId] of Object.entries(result.imageMappings)) {
+                    if (window.ImageManager.getImageData(imageId)) {
+                        window.ImageManager.linkImageToCell(cellRef, imageId);
                     }
                 }
-                
-                window.uiComponents.renderImagePanel();
             }
-            
+
+            // Process cells with hyperlinks to establish image links
+            const sheets = window.ExcelHandler.sheets;
+            for (let sheetIndex = 0; sheetIndex < sheets.length; sheetIndex++) {
+                const sheet = sheets[sheetIndex];
+                for (const cellRef in sheet.data) {
+                    const cellData = sheet.data[cellRef];
+                    if (cellData.imageRef && window.ImageManager.getImageData(cellData.imageRef)) {
+                        window.ImageManager.linkImageToCell(cellRef, cellData.imageRef);
+                    }
+                }
+            }
+
+            window.uiComponents.renderImagePanel();
             window.uiComponents.updateStatusBar(`Loaded zip: ${file.name}`);
         } catch (error) {
             console.error('Error loading zip file:', error);
@@ -431,10 +472,19 @@ class TicknTieApp {
      */
     updateSheetTabs() {
         const tabsContainer = document.getElementById('sheetTabs');
-        if (!tabsContainer) return;
-        
+        if (!tabsContainer) {
+            console.error('Sheet tabs container not found');
+            return;
+        }
+
         tabsContainer.innerHTML = '';
-        
+
+        // Check if sheets exist
+        if (!window.ExcelHandler.sheets || window.ExcelHandler.sheets.length === 0) {
+            console.warn('No sheets to display in tabs');
+            return;
+        }
+
         window.ExcelHandler.sheets.forEach((sheet, index) => {
             const tab = document.createElement('div');
             tab.className = 'sheet-tab';
@@ -470,11 +520,11 @@ class TicknTieApp {
      * Add a new sheet
      */
     addNewSheet() {
-        const name = prompt('Enter sheet name:');
-        if (name) {
-            const index = window.ExcelHandler.createNewSheet(name);
-            this.switchSheet(index);
-        }
+        const name = prompt('Enter sheet name:', `Sheet${window.ExcelHandler.sheets.length + 1}`);
+        // Create sheet even if user cancels or enters empty string
+        // ExcelHandler.createNewSheet will generate a default name if needed
+        const index = window.ExcelHandler.createNewSheet(name || null);
+        this.switchSheet(index);
     }
 
     /**

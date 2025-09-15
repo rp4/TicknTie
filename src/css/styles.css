@@ -26,7 +26,7 @@ body > *:first-child {
 
 .main-container {
     display: flex;
-    height: 100vh;
+    height: calc(100vh - 55px); /* Subtract space for sheet tabs (30px) and status bar (25px) */
     position: relative;
 }
 
@@ -548,10 +548,11 @@ body > *:first-child {
     right: 0;
     height: 30px;
     background: #f8f9fa;
-    border-top: 1px solid #dee2e6;
+    border-top: 2px solid #dee2e6;  /* Made border more visible */
     display: flex;
     align-items: center;
-    z-index: 99;
+    z-index: 1000;  /* Increased z-index to ensure visibility */
+    box-shadow: 0 -2px 4px rgba(0,0,0,0.1);  /* Added shadow for visibility */
 }
 
 .sheet-tabs {
@@ -582,4 +583,146 @@ body > *:first-child {
 
 .sheet-tab:hover:not(.active) {
     background: #f0f0f0;
+}
+
+/* Cell content wrapper */
+.cell-content-wrapper {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    padding: 2px;
+}
+
+/* Pushpin Icon Styles */
+.pushpin-container {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.pushpin-icon {
+    width: 16px;
+    height: 16px;
+    filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.3));
+    transition: transform 0.2s ease;
+}
+
+.pushpin-icon:hover {
+    transform: scale(1.15);
+}
+
+.cell-with-image-ref {
+    background: #fffef5 !important;
+}
+
+.cell-with-image-ref .cell-input {
+    padding-left: 2px;
+}
+
+/* Remove ALL image thumbnail styles */
+.cell-image-thumbnail,
+img.cell-image-thumbnail {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+}
+
+/* Pushpin Color Picker */
+.pushpin-color-picker {
+    position: absolute;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    max-width: 200px;
+}
+
+.color-option {
+    width: 30px;
+    height: 30px;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.color-option:hover {
+    transform: scale(1.1);
+    border-color: #333;
+}
+
+.color-option.selected {
+    border-color: #000;
+    box-shadow: 0 0 0 2px white, 0 0 0 4px #000;
+}
+
+/* Column and Row Resize Handles */
+.header-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+.resize-handle {
+    position: absolute;
+    background: transparent;
+    z-index: 10;
+}
+
+.resize-handle:hover {
+    background: #3498db;
+}
+
+.resize-handle-col {
+    width: 4px;
+    height: 100%;
+    right: -2px;
+    top: 0;
+    cursor: col-resize;
+}
+
+.resize-handle-row {
+    width: 100%;
+    height: 4px;
+    bottom: -2px;
+    left: 0;
+    cursor: row-resize;
+}
+
+/* Ensure headers can be resized */
+.col-header,
+.row-header {
+    position: relative;
+    user-select: none;
+}
+
+/* Visual feedback during resize */
+body.resizing-column {
+    cursor: col-resize !important;
+}
+
+body.resizing-row {
+    cursor: row-resize !important;
+}
+
+/* Prevent text selection during resize */
+.spreadsheet-table.resizing {
+    user-select: none;
+}
+
+/* Make cells respect their widths */
+.spreadsheet-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }

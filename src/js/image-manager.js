@@ -7,6 +7,7 @@ class ImageManager {
     constructor() {
         this.imageStore = new Map(); // Map of imageId -> {url, file, metadata}
         this.cellImageRefs = new Map(); // Map of cellRef -> imageId
+        this.pushpinColors = new Map(); // Map of cellRef -> color
         this.imageIdCounter = 1;
     }
 
@@ -242,12 +243,26 @@ class ImageManager {
     }
 
     /**
+     * Get pushpin color for a cell
+     */
+    getPushpinColor(cellRef) {
+        return this.pushpinColors.get(cellRef) || null;
+    }
+
+    /**
+     * Set pushpin color for a cell
+     */
+    setPushpinColor(cellRef, color) {
+        this.pushpinColors.set(cellRef, color);
+    }
+
+    /**
      * Get statistics about stored images
      */
     getStatistics() {
         const totalSize = Array.from(this.imageStore.values())
             .reduce((sum, img) => sum + img.size, 0);
-        
+
         return {
             totalImages: this.imageStore.size,
             totalMappings: this.cellImageRefs.size,

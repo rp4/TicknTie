@@ -8,6 +8,15 @@ class UIComponents {
         this.currentCell = null;
         this.selectedCells = [];
         this.imagePanelTab = 'preview'; // 'preview' or 'gallery'
+        // Resize tracking
+        this.isResizingColumn = false;
+        this.isResizingRow = false;
+        this.resizeStartX = 0;
+        this.resizeStartY = 0;
+        this.resizingColumn = null;
+        this.resizingRow = null;
+        this.originalWidth = 0;
+        this.originalHeight = 0;
     }
 
     /**
@@ -30,7 +39,8 @@ class UIComponents {
         for (let col = 1; col <= maxCol; col++) {
             const colHeader = this.createHeaderCell(
                 window.ExcelHandler.numberToColumn(col),
-                'col-header'
+                'col-header',
+                col
             );
             headerRow.appendChild(colHeader);
         }
@@ -41,13 +51,25 @@ class UIComponents {
             const tr = document.createElement('tr');
             
             // Row header
-            tr.appendChild(this.createHeaderCell(row.toString(), 'row-header'));
+            const rowHeader = this.createHeaderCell(row.toString(), 'row-header', row);
+            tr.appendChild(rowHeader);
+
+            // Set row height
+            const height = window.TicknTieApp.rowHeights[row] || window.TicknTieApp.defaultRowHeight;
+            tr.style.height = height + 'px';
             
             // Data cells
             for (let col = 1; col <= maxCol; col++) {
                 const cellRef = window.ExcelHandler.createCellRef(row, col);
                 const cellData = sheet.data[cellRef] || {};
                 const td = this.createDataCell(cellRef, cellData);
+
+                // Set column width
+                const width = window.TicknTieApp.columnWidths[col] || window.TicknTieApp.defaultColumnWidth;
+                td.style.width = width + 'px';
+                td.style.minWidth = width + 'px';
+                td.style.maxWidth = width + 'px';
+
                 tr.appendChild(td);
             }
             
@@ -62,10 +84,53 @@ class UIComponents {
     /**
      * Create header cell
      */
-    createHeaderCell(content, className) {
+    createHeaderCell(content, className, index = null) {
         const th = document.createElement('th');
         th.className = className;
-        th.textContent = content;
+
+        // Create wrapper for content and resize handle
+        const wrapper = document.createElement('div');
+        wrapper.className = 'header-wrapper';
+
+        // Add content
+        const contentSpan = document.createElement('span');
+        contentSpan.textContent = content;
+        wrapper.appendChild(contentSpan);
+
+        // Add resize handle for column headers
+        if (className === 'col-header' && index !== null) {
+            const resizeHandle = document.createElement('div');
+            resizeHandle.className = 'resize-handle resize-handle-col';
+            resizeHandle.dataset.column = index;
+
+            // Set width based on stored or default value
+            const width = window.TicknTieApp.columnWidths[index] || window.TicknTieApp.defaultColumnWidth;
+            th.style.width = width + 'px';
+            th.style.minWidth = width + 'px';
+            th.style.maxWidth = width + 'px';
+
+            // Add resize event handlers
+            resizeHandle.addEventListener('mousedown', (e) => this.startColumnResize(e, index));
+            wrapper.appendChild(resizeHandle);
+        }
+
+        // Add resize handle for row headers
+        if (className === 'row-header' && index !== null) {
+            const resizeHandle = document.createElement('div');
+            resizeHandle.className = 'resize-handle resize-handle-row';
+            resizeHandle.dataset.row = index;
+
+            // Set height based on stored or default value
+            const height = window.TicknTieApp.rowHeights[index] || window.TicknTieApp.defaultRowHeight;
+            th.style.height = height + 'px';
+            th.parentElement && (th.parentElement.style.height = height + 'px');
+
+            // Add resize event handlers
+            resizeHandle.addEventListener('mousedown', (e) => this.startRowResize(e, index));
+            wrapper.appendChild(resizeHandle);
+        }
+
+        th.appendChild(wrapper);
         return th;
     }
 
@@ -75,44 +140,183 @@ class UIComponents {
     createDataCell(cellRef, cellData) {
         const td = document.createElement('td');
         td.dataset.cell = cellRef;
-        
+
         // Check for image reference
         const imageData = window.ImageManager.getImageForCell(cellRef);
-        
+
+        // Create a container for cell content
+        const cellContent = document.createElement('div');
+        cellContent.className = 'cell-content-wrapper';
+        cellContent.style.display = 'flex';
+        cellContent.style.alignItems = 'center';
+        cellContent.style.width = '100%';
+        cellContent.style.height = '100%';
+
         if (imageData) {
             td.className = 'cell-with-image-ref';
-            
-            // Add thumbnail
-            const thumbnail = document.createElement('img');
-            thumbnail.className = 'cell-image-thumbnail';
-            thumbnail.src = imageData.url;
-            thumbnail.onclick = (e) => {
-                e.stopPropagation();
-                this.showImageInPanel(imageData);
-            };
-            td.appendChild(thumbnail);
+
+            // Add pushpin icon on the LEFT
+            const pushpin = this.createPushpinIcon(cellRef, imageData);
+            pushpin.style.position = 'relative';
+            pushpin.style.marginRight = '4px';
+            cellContent.appendChild(pushpin);
         }
-        
-        // Add input element
+
+        // Add input element for text (shows filename or regular cell value)
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'cell-input';
-        input.value = cellData.value || '';
+
+        // If there's an image, show the filename as text
+        if (imageData && cellData.imageRef) {
+            input.value = cellData.imageRef || cellData.value || '';
+        } else {
+            input.value = cellData.value || '';
+        }
+
         input.dataset.cell = cellRef;
-        
+        input.style.flex = '1';
+        input.style.border = 'none';
+        input.style.background = 'transparent';
+        input.style.outline = 'none';
+
         // Apply formatting
         if (cellData.formatting) {
             this.applyCellFormatting(input, cellData.formatting);
         }
-        
+
         // Add event listeners
         input.addEventListener('focus', () => this.handleCellFocus(cellRef));
         input.addEventListener('blur', () => this.handleCellBlur(cellRef, input.value));
         input.addEventListener('input', () => this.handleCellInput(cellRef, input.value));
-        
-        td.appendChild(input);
-        
+
+        // Add click handler to cell to ensure panel opens when clicking anywhere in the cell
+        td.addEventListener('click', (e) => {
+            // Focus the input if not already focused
+            if (document.activeElement !== input) {
+                input.focus();
+            }
+            // If cell has image, ensure panel shows it
+            if (imageData) {
+                this.showImageInPanel(imageData);
+            }
+        });
+
+        cellContent.appendChild(input);
+        td.appendChild(cellContent);
+
         return td;
+    }
+
+    /**
+     * Create pushpin icon for cell with image
+     */
+    createPushpinIcon(cellRef, imageData) {
+        const container = document.createElement('div');
+        container.className = 'pushpin-container';
+
+        // Get stored color for this cell or use default
+        const color = window.ImageManager.getPushpinColor(cellRef) || '#FF4444';
+
+        // Create SVG pushpin icon
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', '20');
+        svg.setAttribute('height', '20');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('class', 'pushpin-icon');
+
+        // Pushpin path
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M16,12V4H17V2H7V4H8V12L6,14V16H11.2V22H12.8V16H18V14L16,12Z');
+        path.setAttribute('fill', color);
+        path.setAttribute('class', 'pushpin-path');
+
+        svg.appendChild(path);
+        container.appendChild(svg);
+
+        // Click handler to show image
+        container.onclick = (e) => {
+            e.stopPropagation();
+            this.showImageInPanel(imageData);
+        };
+
+        // Right-click to change color
+        container.oncontextmenu = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.showPushpinColorPicker(cellRef, path, color);
+        };
+
+        return container;
+    }
+
+    /**
+     * Show color picker for pushpin
+     */
+    showPushpinColorPicker(cellRef, pathElement, currentColor) {
+        // Remove any existing color picker
+        const existingPicker = document.querySelector('.pushpin-color-picker');
+        if (existingPicker) {
+            existingPicker.remove();
+        }
+
+        // Create color picker popup
+        const picker = document.createElement('div');
+        picker.className = 'pushpin-color-picker';
+
+        // Predefined colors
+        const colors = [
+            '#FF4444', // Red
+            '#44FF44', // Green
+            '#4444FF', // Blue
+            '#FFAA00', // Orange
+            '#FF00FF', // Magenta
+            '#00FFFF', // Cyan
+            '#FFFF00', // Yellow
+            '#8B4513', // Brown
+            '#800080', // Purple
+            '#000000'  // Black
+        ];
+
+        colors.forEach(color => {
+            const colorBtn = document.createElement('button');
+            colorBtn.className = 'color-option';
+            colorBtn.style.backgroundColor = color;
+            if (color === currentColor) {
+                colorBtn.classList.add('selected');
+            }
+
+            colorBtn.onclick = () => {
+                // Update the icon color
+                pathElement.setAttribute('fill', color);
+
+                // Store the color preference
+                window.ImageManager.setPushpinColor(cellRef, color);
+
+                // Remove picker
+                picker.remove();
+            };
+
+            picker.appendChild(colorBtn);
+        });
+
+        // Position near the cell
+        const cell = document.querySelector(`[data-cell="${cellRef}"]`);
+        const rect = cell.getBoundingClientRect();
+        picker.style.position = 'absolute';
+        picker.style.left = rect.left + 'px';
+        picker.style.top = (rect.bottom + 5) + 'px';
+        picker.style.zIndex = '1000';
+
+        document.body.appendChild(picker);
+
+        // Close on click outside
+        setTimeout(() => {
+            document.addEventListener('click', function closePickerHandler() {
+                picker.remove();
+                document.removeEventListener('click', closePickerHandler);
+            }, { once: true });
+        }, 100);
     }
 
     /**
@@ -382,8 +586,12 @@ class UIComponents {
             const cell = document.querySelector(`[data-cell="${ui.currentCell}"]`);
             if (cell) {
                 cell.className = '';
-                const thumbnail = cell.querySelector('.cell-image-thumbnail');
-                if (thumbnail) thumbnail.remove();
+                // Remove pushpin and reset cell content
+                const wrapper = cell.querySelector('.cell-content-wrapper');
+                if (wrapper) {
+                    const pushpin = wrapper.querySelector('.pushpin-container');
+                    if (pushpin) pushpin.remove();
+                }
             }
             // Update panel
             ui.renderImagePanel();
@@ -399,6 +607,123 @@ class UIComponents {
         const sizes = ['Bytes', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    /**
+     * Start column resize
+     */
+    startColumnResize(e, column) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        this.isResizingColumn = true;
+        this.resizingColumn = column;
+        this.resizeStartX = e.pageX;
+        this.originalWidth = window.TicknTieApp.columnWidths[column] || window.TicknTieApp.defaultColumnWidth;
+
+        // Add resize cursor to body
+        document.body.style.cursor = 'col-resize';
+
+        // Add global mouse handlers
+        document.addEventListener('mousemove', this.handleColumnResize);
+        document.addEventListener('mouseup', this.endColumnResize);
+    }
+
+    /**
+     * Handle column resize
+     */
+    handleColumnResize = (e) => {
+        if (!this.isResizingColumn) return;
+
+        const deltaX = e.pageX - this.resizeStartX;
+        const newWidth = Math.max(30, this.originalWidth + deltaX); // Minimum width of 30px
+
+        // Update column width in state
+        window.TicknTieApp.columnWidths[this.resizingColumn] = newWidth;
+
+        // Update all cells in this column
+        const colHeaders = document.querySelectorAll(`.col-header:nth-child(${this.resizingColumn + 1})`);
+        colHeaders.forEach(header => {
+            header.style.width = newWidth + 'px';
+            header.style.minWidth = newWidth + 'px';
+            header.style.maxWidth = newWidth + 'px';
+        });
+
+        const cells = document.querySelectorAll(`td:nth-child(${this.resizingColumn + 1})`);
+        cells.forEach(cell => {
+            cell.style.width = newWidth + 'px';
+            cell.style.minWidth = newWidth + 'px';
+            cell.style.maxWidth = newWidth + 'px';
+        });
+    }
+
+    /**
+     * End column resize
+     */
+    endColumnResize = () => {
+        if (!this.isResizingColumn) return;
+
+        this.isResizingColumn = false;
+        this.resizingColumn = null;
+        document.body.style.cursor = '';
+
+        // Remove global mouse handlers
+        document.removeEventListener('mousemove', this.handleColumnResize);
+        document.removeEventListener('mouseup', this.endColumnResize);
+    }
+
+    /**
+     * Start row resize
+     */
+    startRowResize(e, row) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        this.isResizingRow = true;
+        this.resizingRow = row;
+        this.resizeStartY = e.pageY;
+        this.originalHeight = window.TicknTieApp.rowHeights[row] || window.TicknTieApp.defaultRowHeight;
+
+        // Add resize cursor to body
+        document.body.style.cursor = 'row-resize';
+
+        // Add global mouse handlers
+        document.addEventListener('mousemove', this.handleRowResize);
+        document.addEventListener('mouseup', this.endRowResize);
+    }
+
+    /**
+     * Handle row resize
+     */
+    handleRowResize = (e) => {
+        if (!this.isResizingRow) return;
+
+        const deltaY = e.pageY - this.resizeStartY;
+        const newHeight = Math.max(20, this.originalHeight + deltaY); // Minimum height of 20px
+
+        // Update row height in state
+        window.TicknTieApp.rowHeights[this.resizingRow] = newHeight;
+
+        // Update the row
+        const rows = document.querySelectorAll(`tr:nth-child(${this.resizingRow + 1})`);
+        rows.forEach(row => {
+            row.style.height = newHeight + 'px';
+        });
+    }
+
+    /**
+     * End row resize
+     */
+    endRowResize = () => {
+        if (!this.isResizingRow) return;
+
+        this.isResizingRow = false;
+        this.resizingRow = null;
+        document.body.style.cursor = '';
+
+        // Remove global mouse handlers
+        document.removeEventListener('mousemove', this.handleRowResize);
+        document.removeEventListener('mouseup', this.endRowResize);
     }
 
     /**
