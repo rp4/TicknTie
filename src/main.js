@@ -6,7 +6,7 @@
 import '@univerjs/preset-sheets-core/lib/index.css'
 import { createUniver, defaultTheme, LocaleType, Tools } from '@univerjs/presets'
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core'
-import enUS from '@univerjs/ui/lib/locale/en-US.js'
+import UniverPresetSheetsCoreEnUS from '@univerjs/preset-sheets-core/lib/locales/en-US.js'
 import { ImagePlugin } from './image-plugin'
 
 // Initialize application
@@ -14,11 +14,23 @@ async function init() {
   try {
     console.log('🚀 Initializing TicknTie...')
 
+    // Debug locale loading
+    console.log('Loading preset locale...')
+    console.log('Preset locale type:', typeof UniverPresetSheetsCoreEnUS)
+    console.log('Preset locale keys (if object):', UniverPresetSheetsCoreEnUS ? Object.keys(UniverPresetSheetsCoreEnUS).slice(0, 10) : 'Not an object')
+
+    // Check if it's a default export
+    const locale = UniverPresetSheetsCoreEnUS.default || UniverPresetSheetsCoreEnUS
+    console.log('Using locale:', typeof locale)
+    if (typeof locale === 'object') {
+      console.log('Locale sample keys:', Object.keys(locale).slice(0, 10))
+    }
+
     // Create Univer instance with spreadsheet
     const { univerAPI } = createUniver({
       locale: LocaleType.EN_US,
       locales: {
-        'en-US': enUS
+        [LocaleType.EN_US]: locale
       },
       theme: defaultTheme,
       presets: [
