@@ -480,10 +480,12 @@ export class ImagePlugin {
     if (savedWidth && savedWidth !== '0') {
       sidebar.style.width = savedWidth + 'px'
       if (collapseBtn) {
-        collapseBtn.style.right = savedWidth + 'px'
+        // Position on outer (left) edge, flush with sidebar
+        collapseBtn.style.right = `${savedWidth}px`
       }
     } else if (collapseBtn) {
-      collapseBtn.style.right = '350px' // Default width
+      // Position on outer (left) edge with default width
+      collapseBtn.style.right = '350px'
     }
 
     // Check if sidebar was collapsed
@@ -492,7 +494,7 @@ export class ImagePlugin {
       sidebar.classList.add('collapsed')
       sidebar.style.width = '40px'
       if (collapseBtn) {
-        collapseBtn.style.right = '40px'
+        collapseBtn.style.display = 'none'  // Hide button when collapsed
         const collapseIcon = collapseBtn.querySelector('.collapse-icon')
         if (collapseIcon) collapseIcon.textContent = '◀'
       }
@@ -532,10 +534,10 @@ export class ImagePlugin {
       if (newWidth >= minWidth && newWidth <= maxWidth) {
         sidebar.style.width = newWidth + 'px'
         sidebar.classList.remove('collapsed')
-        // Update button position
+        // Update button position to track with sidebar (outer edge)
         const collapseBtn = document.getElementById('collapseBtn')
         if (collapseBtn) {
-          collapseBtn.style.right = newWidth + 'px'
+          collapseBtn.style.right = `${newWidth}px`
         }
       }
     })
@@ -549,11 +551,12 @@ export class ImagePlugin {
         resizeHandle.classList.remove('resizing')
 
         // Save width to localStorage
-        localStorage.setItem('sidebarWidth', sidebar.offsetWidth)
-        // Update button position
+        const finalWidth = sidebar.offsetWidth
+        localStorage.setItem('sidebarWidth', finalWidth)
+        // Update button position (outer edge)
         const collapseBtn = document.getElementById('collapseBtn')
         if (collapseBtn) {
-          collapseBtn.style.right = sidebar.offsetWidth + 'px'
+          collapseBtn.style.right = `${finalWidth}px`
         }
       }
     })
@@ -595,7 +598,8 @@ export class ImagePlugin {
       // Expand
       sidebar.style.width = defaultWidth + 'px'
       sidebar.classList.remove('collapsed')
-      collapseBtn.style.right = defaultWidth + 'px'
+      collapseBtn.style.right = `${defaultWidth}px`  // Outer edge
+      collapseBtn.style.display = 'flex'  // Show button
       if (collapseIcon) collapseIcon.textContent = '▶'
       localStorage.setItem('sidebarWidth', defaultWidth)
       localStorage.removeItem('sidebarCollapsed')
@@ -603,7 +607,7 @@ export class ImagePlugin {
       // Collapse
       sidebar.style.width = collapsedWidth + 'px'
       sidebar.classList.add('collapsed')
-      collapseBtn.style.right = collapsedWidth + 'px'
+      collapseBtn.style.display = 'none'  // Hide button
       if (collapseIcon) collapseIcon.textContent = '◀'
       localStorage.setItem('sidebarWidth', collapsedWidth)
       localStorage.setItem('sidebarCollapsed', 'true')
@@ -619,7 +623,8 @@ export class ImagePlugin {
       const defaultWidth = 350
       sidebar.style.width = defaultWidth + 'px'
       sidebar.classList.remove('collapsed')
-      collapseBtn.style.right = defaultWidth + 'px'
+      collapseBtn.style.right = `${defaultWidth}px`  // Outer edge
+      collapseBtn.style.display = 'flex'  // Show button
       if (collapseIcon) collapseIcon.textContent = '▶'
       localStorage.setItem('sidebarWidth', defaultWidth)
       localStorage.removeItem('sidebarCollapsed')
