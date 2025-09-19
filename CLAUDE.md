@@ -4,144 +4,214 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TicknTie is an open-source web application for auditing Excel files with image attachments, designed in the style of DataSnipper. It allows users to link images to Excel cells and view full-resolution images in a side panel.
+TicknTie is an open-source web application for auditing Excel files with image attachments, designed in the style of DataSnipper. It provides a simple image viewer sidebar plugin for Univer spreadsheets, allowing users to attach images to cells via "pushpin" markers and view full-resolution images in a side panel.
 
-## Application Architecture
+## Development Approach
 
-### Project Structure
+This project uses **Vite + Univer** for the best balance of simplicity and functionality:
+- **Vite** provides instant hot-reload development and optimized production builds
+- **Univer** handles all spreadsheet functionality (formulas, Excel import/export, etc.)
+- **Image Sidebar** is a lightweight plugin that adds image viewing capabilities
+
+## Project Structure
+
 ```
 TicknTie/
 ├── src/
-│   ├── css/
-│   │   └── styles.css          # All application styles
-│   ├── js/
-│   │   ├── app.js              # Main application logic
-│   │   ├── excel-handler.js    # Excel file processing
-│   │   ├── image-manager.js    # Image storage and linking
-│   │   ├── ui-components.js    # UI rendering and events
-│   │   └── zip-handler.js      # Zip file import/export
-│   └── index.html              # Main HTML file
-├── public/
-│   └── images/                 # Temporary image storage
-├── package.json                # Dependencies and scripts
-├── README.md                   # Project documentation
-├── LICENSE                     # MIT License
+│   ├── main.js              # Application entry point & Univer initialization
+│   ├── image-plugin.js      # Image sidebar plugin for Univer
+│   ├── styles.css           # Application styles
+│   └── index.html           # Main HTML template
+├── public/                  # Static assets
+├── package.json            # Dependencies and scripts
+├── vite.config.js          # Vite configuration
+├── README.md               # Project documentation
 └── .gitignore
 ```
 
-### Core Data Structures
-- `workbook`: Main object storing all Excel data
-- `sheets`: Array of sheet objects with cells and metadata
-- `currentSheet`: Index of active sheet
-- `imageStore`: Map of image IDs to image data (replaces cellImages)
-  - Format: `{ "img_001.png": { url: "blob:...", data: "base64...", name: "original.png" } }`
-- `cellImageRefs`: Map of cell references to image IDs
-  - Format: `{ "A1": "img_001.png", "B2": "img_002.png" }`
-- `selectedCells`: Array tracking multi-cell selection
+## Core Architecture
 
-### Key Functionality Areas
-1. **Excel Processing**: Uses SheetJS library (installed via npm)
-2. **Image Handling**: 
-   - Images stored separately from Excel data
-   - Cells contain image references (e.g., "img_001.png")
-   - Full images displayed in side panel
-3. **Zip Support**: JSZip for bundling Excel files with images
-4. **Cell Rendering**: Dynamic grid with image thumbnails
-5. **Side Panel**: Full image preview and image gallery
+### Simplified Data Model
+- **Univer Instance**: Handles all spreadsheet operations
+- **Image Store**: Simple Map storing image data
+  ```javascript
+  imageStore = new Map() // imageId -> { url, name, size, type }
+  cellImages = new Map() // cellRef -> imageId
+  ```
+
+### Key Components
+
+1. **Univer Spreadsheet** (Left Side)
+   - Full Excel-like functionality
+   - Formula support
+   - Import/Export capabilities
+   - Handled entirely by Univer
+
+2. **Image Sidebar Plugin** (Right Side)
+   - Simple image viewer
+   - Upload images to cells
+   - Display selected cell's image
+   - Remove images from cells
 
 ## Development Commands
 
 ```bash
-# Install dependencies
-npm install
+# Initial setup (one time)
+npm create vite@latest . -- --template vanilla
+npm install @univerjs/presets
 
-# Start development server
-npm run dev
+# Development
+npm run dev          # Start dev server with hot reload (http://localhost:5173)
 
-# Build for production (if build system added later)
-npm run build
-
-# Run tests (when added)
-npm test
+# Production
+npm run build        # Build for production
+npm run preview     # Preview production build
 ```
 
-## Key Modules and Their Responsibilities
+## Implementation Guide
 
-### app.js
-- Main application initialization
-- Event coordination between modules
-- Global state management
+### main.js - Application Entry
+```javascript
+import { createUniver, LocaleType } from '@univerjs/presets'
+import { UniverSheetsCorePreset } from '@univerjs/presets/sheets'
+import { ImagePlugin } from './image-plugin'
 
-### excel-handler.js
-- `loadExcelFile(file)`: Process uploaded Excel files
-- `exportExcel()`: Generate Excel with image references
-- `parseWorkbook(data)`: Convert Excel data to internal format
-- `updateCellValue(sheet, cell, value)`: Update cell data
+// Initialize Univer
+const { univerAPI } = createUniver({
+  locale: LocaleType.EN_US,
+  presets: [UniverSheetsCorePreset({ container: 'spreadsheet' })]
+})
 
-### image-manager.js
-- `storeImage(file)`: Store image and return ID
-- `linkImageToCell(cellRef, imageId)`: Create cell-image association
-- `getImageData(imageId)`: Retrieve image for display
-- `generateThumbnail(imageId)`: Create cell thumbnail
-- `clearImageStore()`: Clean up memory
+// Initialize Image Plugin
+const imagePlugin = new ImagePlugin(univerAPI)
+imagePlugin.init()
+```
 
-### ui-components.js
-- `renderSheet()`: Draw spreadsheet grid
-- `renderSidePanel()`: Display image preview panel
-- `updateCellDisplay(cellRef)`: Update individual cell
-- `handleCellSelection(cellRef)`: Process cell clicks
-- `toggleSidePanel()`: Show/hide image panel
+### image-plugin.js - Image Sidebar
+```javascript
+export class ImagePlugin {
+  constructor(univerAPI) {
+    this.univerAPI = univerAPI
+    this.imageStore = new Map()
+    this.cellImages = new Map()
+  }
 
-### zip-handler.js
-- `loadZipFile(file)`: Extract Excel and images from zip
-- `createZipBundle()`: Package Excel with images folder
-- `extractImages(zip)`: Process images from zip
-- `generateImageReferences()`: Create Excel-compatible image links
+  init() {
+    this.createSidebar()
+    this.listenToSelection()
+    this.setupImageUpload()
+  }
+
+  // Simple sidebar implementation
+  createSidebar() { /* Create HTML elements */ }
+
+  // Listen for cell selection
+  listenToSelection() {
+    this.univerAPI.onSelectionChange(selection => {
+      this.updateSidebar(selection)
+    })
+  }
+}
+```
 
 ## Working with Features
 
 ### Adding Image to Cell
-1. User selects cell and clicks "Add Image"
-2. Image stored in `imageStore` with unique ID
-3. Cell value set to image reference
-4. Thumbnail displayed in cell
-5. Full image shown in side panel on cell selection
+1. Select a cell in Univer spreadsheet
+2. Click "Add Image" button in sidebar
+3. Image stored in memory with unique ID
+4. Cell displays 📌 icon with filename
+5. Image appears in sidebar
 
-### Exporting with Images
-1. User clicks "Export"
-2. System creates zip file containing:
-   - Excel file with image references
-   - Images folder with all image files
-3. Image references in Excel use relative paths
+### Cell-Image Association
+- Images linked to cells via simple Map
+- No complex data structures needed
+- Univer handles cell references
 
-### Importing Zip Bundle
-1. User uploads .zip file
-2. System extracts Excel and images
-3. Images loaded into `imageStore`
-4. Excel cells mapped to correct images
-5. Application ready for editing
+### Image Display
+- Click cell with image → Shows in sidebar
+- Display image info (name, size, type)
+- Remove button to clear image
 
-## Important Considerations
+## Important Design Decisions
 
-1. **Image Storage**: Images kept in memory during session, not embedded in Excel
-2. **File Size**: Separate image storage prevents Excel file bloat
-3. **Performance**: Lazy loading for images, thumbnails for cells
-4. **Compatibility**: Excel shows image references, full images only in app
-5. **Browser Limits**: Consider memory usage with many/large images
-6. **Security**: Validate image files, sanitize filenames
+1. **Keep It Simple**: Leverage Univer for all spreadsheet complexity
+2. **Minimal State**: Just two Maps for image management
+3. **No Custom Rendering**: Use cell values for visual indicators (📌 emoji)
+4. **Memory Only**: Images stored in browser memory during session
+5. **Clean Separation**: Spreadsheet logic (Univer) vs Image logic (Plugin)
 
-## API/Library Dependencies
+## Development Best Practices
 
-- **SheetJS (xlsx)**: Excel file processing
-- **JSZip**: Zip file creation and extraction
-- **No framework**: Vanilla JavaScript for simplicity
-- **No build tools initially**: Direct module loading
+### When Adding Features
+1. **Let Univer handle it** if it's spreadsheet-related
+2. **Keep image logic simple** - just storage and display
+3. **Use Vite's HMR** for fast development cycles
+4. **Test with real Excel files** to ensure compatibility
+
+### Performance Considerations
+- **Lazy load images** only when cells are selected
+- **Use object URLs** for efficient image display
+- **Clean up URLs** when images are removed
+- **Consider file size limits** for browser memory
+
+## Deployment
+
+```bash
+# Build for production
+npm run build
+
+# Output in dist/ folder
+# - Optimized and minified
+# - Ready for static hosting
+# - Can be served from any web server
+```
+
+## Why This Approach?
+
+### Vite Benefits
+- ⚡ **Instant updates** during development (HMR)
+- 📦 **Optimized builds** for production
+- 🎯 **Zero config** to start
+- 🔧 **Modern tooling** out of the box
+
+### Univer Benefits
+- 📊 **Full spreadsheet** functionality
+- 📁 **Excel compatibility** built-in
+- 🔢 **Formula support** included
+- 🎨 **Professional UI** ready to use
+
+### Simplicity Benefits
+- 📝 **Minimal code** to maintain
+- 🚀 **Fast to develop** new features
+- 🐛 **Easy to debug** issues
+- 👥 **Simple to understand** for new developers
+
+## Common Tasks
+
+### Start Fresh Development
+```bash
+git checkout univer-simple-plugin
+npm install
+npm run dev
+# Open http://localhost:5173
+```
+
+### Add New Feature
+1. Modify `image-plugin.js` for image-related features
+2. Let Univer handle spreadsheet features
+3. Save file → See changes instantly (HMR)
+
+### Deploy to Production
+```bash
+npm run build
+# Upload dist/ folder to hosting service
+```
 
 ## Testing Guidelines
 
-When adding features:
-1. Test with various Excel formats (.xlsx, .xls)
-2. Verify image formats (PNG, JPG, GIF)
-3. Test large files (>50MB)
-4. Check memory usage with many images
-5. Validate zip export/import cycle
+1. **Excel Files**: Test import/export with real .xlsx files
+2. **Image Formats**: Verify PNG, JPG, GIF support
+3. **Large Files**: Test with files >10MB
+4. **Multiple Images**: Test with 50+ images attached
+5. **Browser Compatibility**: Test in Chrome, Firefox, Safari
