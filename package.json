@@ -1,39 +1,27 @@
 {
   "name": "tickntie",
-  "version": "1.0.0",
-  "description": "Open-source web application for auditing Excel files with image attachments",
-  "main": "src/landing.html",
+  "version": "2.0.0",
+  "description": "Image viewer sidebar plugin for Univer spreadsheets",
+  "type": "module",
   "scripts": {
-    "dev": "npx http-server src -p 5000 -o /landing.html",
-    "dev:app": "npx http-server src -p 5000 -o /app.html",
-    "start": "npx http-server src -p 5000",
-    "build": "echo 'No build required - static site'",
-    "dev:3000": "npx http-server src -p 3000 -o /landing.html",
-    "dev:8080": "npx http-server src -p 8080 -o /landing.html",
-    "test": "echo \"Error: no test specified yet\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@univerjs/presets": "^0.10.8",
+    "@univerjs/preset-sheets-core": "^0.10.8"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
   },
   "keywords": [
     "excel",
-    "audit",
     "spreadsheet",
-    "image-annotation",
-    "datasnipp er-style"
+    "univer",
+    "image-viewer",
+    "audit"
   ],
   "author": "",
-  "license": "MIT",
-  "dependencies": {
-    "xlsx": "^0.18.5",
-    "jszip": "^3.10.1"
-  },
-  "devDependencies": {
-    "http-server": "^14.1.1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/yourusername/tickntie"
-  },
-  "bugs": {
-    "url": "https://github.com/yourusername/tickntie/issues"
-  },
-  "homepage": "https://github.com/yourusername/tickntie#readme"
+  "license": "MIT"
 }

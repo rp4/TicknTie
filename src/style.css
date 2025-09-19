@@ -1,0 +1,225 @@
+/**
+ * TicknTie - Clean Minimal Styles
+ */
+
+/* Reset & Base */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* App Layout */
+#app {
+  display: flex;
+  height: 100vh;
+}
+
+#spreadsheet {
+  flex: 1;
+  min-width: 0; /* Prevent flex child from overflowing */
+}
+
+#sidebar {
+  width: 350px;
+  background: #f8f9fa;
+  border-left: 1px solid #dee2e6;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Sidebar Header */
+.sidebar-header {
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.sidebar-header h3 {
+  margin: 0 0 15px 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* Sidebar Content */
+.sidebar-content {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+/* Cell Info */
+.cell-info {
+  padding: 12px 15px;
+  background: white;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  border-left: 4px solid #667eea;
+}
+
+.cell-info small {
+  display: block;
+  color: #6c757d;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.cell-info strong {
+  color: #667eea;
+  font-size: 16px;
+}
+
+/* Buttons */
+.btn-primary,
+.btn-danger {
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: white;
+  color: #667eea;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.btn-danger {
+  background: #dc3545;
+  color: white;
+  margin-top: 15px;
+}
+
+.btn-danger:hover {
+  background: #c82333;
+}
+
+/* Image Container */
+.image-container {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  min-height: 200px;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  color: #6c757d;
+  padding: 40px 20px;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 15px;
+  opacity: 0.5;
+}
+
+.empty-state p {
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+.empty-state small {
+  color: #adb5bd;
+  font-size: 12px;
+}
+
+/* Image Preview */
+.image-preview {
+  animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.image-preview img {
+  width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+}
+
+/* Image Details */
+.image-details {
+  background: #f8f9fa;
+  border-radius: 6px;
+  padding: 15px;
+  font-size: 13px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 8px 0;
+}
+
+.detail-row span {
+  color: #6c757d;
+}
+
+.detail-row strong {
+  color: #212529;
+}
+
+/* Scrollbar Styles */
+.sidebar-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  #sidebar {
+    width: 300px;
+  }
+}
+
+@media (max-width: 600px) {
+  #app {
+    flex-direction: column;
+  }
+
+  #sidebar {
+    width: 100%;
+    height: 300px;
+    border-left: none;
+    border-top: 1px solid #dee2e6;
+  }
+}
