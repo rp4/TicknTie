@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TicknTie is an open-source web application for auditing Excel files with image attachments, designed in the style of DataSnipper. It provides a simple image viewer sidebar plugin for Univer spreadsheets, allowing users to attach images to cells via "pushpin" markers and view full-resolution images in a side panel.
+TicknTie is an open-source web application for auditing Excel files with image attachments, designed in the style of DataSnipper. It provides a simple image viewer sidebar plugin for Univer spreadsheets, allowing users to attach files to cells via "pushpin" markers and view previews in a side panel.
 
 ## Development Approach
 
 This project uses **Vite + Univer** for the best balance of simplicity and functionality:
 - **Vite** provides instant hot-reload development and optimized production builds
 - **Univer** handles all spreadsheet functionality (formulas, Excel import/export, etc.)
-- **Image Sidebar** is a lightweight plugin that adds image viewing capabilities
+- **Image Sidebar** is a lightweight plugin that adds file preview capabilities with smart caching
 
 ## Project Structure
 
@@ -19,7 +19,7 @@ This project uses **Vite + Univer** for the best balance of simplicity and funct
 TicknTie/
 ├── src/
 │   ├── main.js              # Application entry point & Univer initialization
-│   ├── image-plugin.js      # Image sidebar plugin for Univer
+│   ├── image-plugin.js      # Hyperlink-based image sidebar plugin
 │   ├── styles.css           # Application styles
 │   └── index.html           # Main HTML template
 ├── public/                  # Static assets
@@ -31,12 +31,13 @@ TicknTie/
 
 ## Core Architecture
 
-### Simplified Data Model
+### Data Model (Hyperlink-Based)
 - **Univer Instance**: Handles all spreadsheet operations
-- **Image Store**: Simple Map storing image data
+- **Hyperlink Storage**: Files stored as data URLs or web links
   ```javascript
-  imageStore = new Map() // imageId -> { url, name, size, type }
-  cellImages = new Map() // cellRef -> imageId
+  cellHyperlinks = new Map()  // cellRef -> { url, displayText }
+  previewCache = new Map()    // url -> { preview, timestamp, size }
+  preloadQueue = []           // Queue for preloading adjacent cells
   ```
 
 ### Key Components
@@ -45,13 +46,14 @@ TicknTie/
    - Full Excel-like functionality
    - Formula support
    - Import/Export capabilities
-   - Handled entirely by Univer
+   - Cells display 📌 icon for attached files
 
 2. **Image Sidebar Plugin** (Right Side)
-   - Simple image viewer
-   - Upload images to cells
-   - Display selected cell's image
-   - Remove images from cells
+   - One-click file upload (opens native file picker)
+   - Displays image/PDF previews
+   - Smart caching with LRU eviction
+   - Adjacent cell preloading (3x3 grid)
+   - Resizable and collapsible sidebar
 
 ## Development Commands
 
@@ -87,73 +89,90 @@ const imagePlugin = new ImagePlugin(univerAPI)
 imagePlugin.init()
 ```
 
-### image-plugin.js - Image Sidebar
+### image-plugin.js - Hyperlink Image Sidebar
 ```javascript
 export class ImagePlugin {
   constructor(univerAPI) {
     this.univerAPI = univerAPI
-    this.imageStore = new Map()
-    this.cellImages = new Map()
+    this.cellHyperlinks = new Map()  // cellRef -> { url, displayText }
+    this.previewCache = new Map()    // url -> { preview, timestamp, size }
+    this.preloadQueue = []
+    this.maxCacheSize = 100          // Max cached previews
+    this.maxCacheAge = 30 * 60 * 1000 // 30 minutes
   }
 
   init() {
     this.createSidebar()
     this.listenToSelection()
-    this.setupImageUpload()
+    this.setupHyperlinkInput()
+    this.startCacheCleanup()
   }
 
-  // Simple sidebar implementation
-  createSidebar() { /* Create HTML elements */ }
+  // Direct file upload experience
+  setupHyperlinkInput() {
+    // Click button → Open file picker → Auto-process file
+  }
 
-  // Listen for cell selection
-  listenToSelection() {
-    this.univerAPI.onSelectionChange(selection => {
-      this.updateSidebar(selection)
-    })
+  // Smart preloading for instant preview
+  preloadAdjacentCells(cellRef) {
+    // Preload 3x3 grid around selected cell
   }
 }
 ```
 
 ## Working with Features
 
-### Adding Image to Cell
+### Adding File to Cell
 1. Select a cell in Univer spreadsheet
-2. Click "Add Image" button in sidebar
-3. Image stored in memory with unique ID
-4. Cell displays 📌 icon with filename
-5. Image appears in sidebar
+2. Click "➕ Add File to Cell" button
+3. Native file picker opens immediately
+4. Select image or PDF file
+5. File converts to data URL and stores as hyperlink
+6. Cell displays 📌 icon with filename
+7. Preview appears instantly in sidebar
 
-### Cell-Image Association
-- Images linked to cells via simple Map
-- No complex data structures needed
-- Univer handles cell references
+### File Storage Approach
+- **Uploaded files**: Converted to data URLs (base64 encoded)
+- **Web links**: Can be added via URL (future feature)
+- **Excel export**: Hyperlinks preserved as text with 📌 icon
+- **Session-based**: Files stored in browser memory
 
-### Image Display
-- Click cell with image → Shows in sidebar
-- Display image info (name, size, type)
-- Remove button to clear image
+### Smart Caching System
+- **Preview cache**: Up to 100 previews cached with LRU eviction
+- **Adjacent preloading**: 3x3 grid around selected cell
+- **Time-based cleanup**: Cache entries expire after 30 minutes
+- **Instant display**: Cached previews show without loading
+
+### Cell Selection Detection
+Multiple detection methods for reliability:
+1. Univer API worksheet selection methods
+2. Keyboard navigation (arrow keys, Tab, Enter)
+3. Mouse click and focus events
+4. Internal service discovery
+5. DOM observation fallback
 
 ## Important Design Decisions
 
-1. **Keep It Simple**: Leverage Univer for all spreadsheet complexity
-2. **Minimal State**: Just two Maps for image management
-3. **No Custom Rendering**: Use cell values for visual indicators (📌 emoji)
-4. **Memory Only**: Images stored in browser memory during session
-5. **Clean Separation**: Spreadsheet logic (Univer) vs Image logic (Plugin)
+1. **Hyperlink Architecture**: Files stored as data URLs, enabling future web link support
+2. **Direct Upload UX**: One-click file picker without intermediate forms
+3. **Smart Caching**: Preview cache with preloading for instant display
+4. **No Size Limits**: Since only previews are cached, not full files
+5. **Session Storage**: Files exist only during browser session
 
 ## Development Best Practices
 
 ### When Adding Features
-1. **Let Univer handle it** if it's spreadsheet-related
-2. **Keep image logic simple** - just storage and display
-3. **Use Vite's HMR** for fast development cycles
-4. **Test with real Excel files** to ensure compatibility
+1. **Let Univer handle** all spreadsheet operations
+2. **Keep plugin simple** - just file handling and preview
+3. **Use caching** for performance optimization
+4. **Test selection detection** with mouse and keyboard
 
 ### Performance Considerations
-- **Lazy load images** only when cells are selected
-- **Use object URLs** for efficient image display
-- **Clean up URLs** when images are removed
-- **Consider file size limits** for browser memory
+- **Lazy load previews** only when needed
+- **Preload adjacent cells** in background
+- **Use LRU cache** to manage memory
+- **Convert to data URLs** for instant access
+- **Clean up old cache** entries periodically
 
 ## Deployment
 
@@ -169,23 +188,23 @@ npm run build
 
 ## Why This Approach?
 
-### Vite Benefits
-- ⚡ **Instant updates** during development (HMR)
-- 📦 **Optimized builds** for production
-- 🎯 **Zero config** to start
-- 🔧 **Modern tooling** out of the box
+### Hyperlink Benefits
+- ✅ **Future-proof**: Ready for web links and network files
+- 📎 **Excel compatible**: Links preserved in exports
+- 🚀 **Fast previews**: Data URLs load instantly
+- 💾 **Flexible storage**: Supports both local and remote files
 
-### Univer Benefits
-- 📊 **Full spreadsheet** functionality
-- 📁 **Excel compatibility** built-in
-- 🔢 **Formula support** included
-- 🎨 **Professional UI** ready to use
+### Caching Benefits
+- ⚡ **Instant display**: No fetch delay for cached previews
+- 🎯 **Smart preloading**: Adjacent cells ready before selection
+- 🧹 **Automatic cleanup**: Memory managed with LRU eviction
+- 📊 **Scalable**: Handles many files efficiently
 
-### Simplicity Benefits
-- 📝 **Minimal code** to maintain
-- 🚀 **Fast to develop** new features
-- 🐛 **Easy to debug** issues
-- 👥 **Simple to understand** for new developers
+### UX Benefits
+- 🖱️ **One-click upload**: Direct file picker access
+- 📌 **Visual indicators**: Pushpin icons in cells
+- 🔍 **Auto-expand sidebar**: Opens when cell with file selected
+- ↔️ **Resizable panel**: Adjust sidebar width as needed
 
 ## Common Tasks
 
@@ -194,13 +213,20 @@ npm run build
 git checkout univer-simple-plugin
 npm install
 npm run dev
-# Open http://localhost:5173
+# Open http://localhost:5173 (or shown port)
 ```
 
-### Add New Feature
-1. Modify `image-plugin.js` for image-related features
-2. Let Univer handle spreadsheet features
-3. Save file → See changes instantly (HMR)
+### Debug Cell Selection
+1. Open browser console (F12)
+2. Click cells or use arrow keys
+3. Look for: "Selection changed to: B3"
+4. Check debug output for API availability
+
+### Add New File Type Support
+1. Update `accept` attribute in file input
+2. Add type detection in `getFileType()`
+3. Add preview handler for new type
+4. Test with sample files
 
 ### Deploy to Production
 ```bash
@@ -210,8 +236,25 @@ npm run build
 
 ## Testing Guidelines
 
-1. **Excel Files**: Test import/export with real .xlsx files
-2. **Image Formats**: Verify PNG, JPG, GIF support
-3. **Large Files**: Test with files >10MB
-4. **Multiple Images**: Test with 50+ images attached
-5. **Browser Compatibility**: Test in Chrome, Firefox, Safari
+1. **Cell Selection**: Test with mouse clicks and keyboard navigation
+2. **File Upload**: Verify immediate file picker opening
+3. **Image Formats**: Test PNG, JPG, GIF, WebP support
+4. **PDF Preview**: Verify first page preview generation
+5. **Cache Performance**: Test with 50+ files attached
+6. **Browser Compatibility**: Test in Chrome, Firefox, Safari
+7. **Excel Export**: Verify cells show 📌 icon with filename
+
+## Known Limitations
+
+1. **Session Storage**: Files lost on page refresh (by design)
+2. **Excel Hyperlinks**: Currently stored as text, not true hyperlinks
+3. **CORS**: Web URLs may have cross-origin restrictions
+4. **Large Files**: Very large files may impact browser memory
+
+## Future Enhancements
+
+- Support for web URLs alongside file uploads
+- True Excel hyperlink export when Univer API supports it
+- Persistent storage option (IndexedDB)
+- Multi-page PDF navigation
+- Batch file upload support
