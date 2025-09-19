@@ -96,7 +96,7 @@ export class ImagePlugin {
 
     sidebar.innerHTML += `
       <div class="sidebar-header">
-        <h3>📌 Image Viewer</h3>
+        <h3>Evidence Viewer</h3>
 
         <!-- File Upload (hidden input) -->
         <input
@@ -686,21 +686,6 @@ export class ImagePlugin {
         <img src="${preview.dataUrl}" alt="${displayText}" style="max-width: 100%; height: auto;">
         ${preview.type === 'pdf' ? `<div class="pdf-notice">📄 PDF Preview (Page 1 of ${preview.pageCount || '?'})</div>` : ''}
 
-        <div class="image-details">
-          <div class="detail-row">
-            <span>Name:</span>
-            <strong>${displayText}</strong>
-          </div>
-          <div class="detail-row">
-            <span>Type:</span>
-            <strong>${preview.type}</strong>
-          </div>
-          <div class="detail-row">
-            <span>Dimensions:</span>
-            <strong>${preview.width} × ${preview.height}px</strong>
-          </div>
-        </div>
-
         <button class="btn-primary" onclick="window.open('${url}', '_blank')" style="width: 100%; margin-top: 10px;">
           🔗 Open Link
         </button>
@@ -1054,17 +1039,19 @@ export class ImagePlugin {
     const defaultWidth = 350
 
     if (sidebar.classList.contains('collapsed')) {
+      // Expand
       sidebar.style.width = defaultWidth + 'px'
       sidebar.classList.remove('collapsed')
       collapseBtn.style.right = `${defaultWidth}px`
-      collapseBtn.style.display = 'flex'
+      collapseBtn.style.display = 'flex'  // Show button when expanded
       if (collapseIcon) collapseIcon.textContent = '▶'
       localStorage.setItem('sidebarWidth', defaultWidth)
       localStorage.removeItem('sidebarCollapsed')
     } else {
+      // Collapse
       sidebar.style.width = collapsedWidth + 'px'
       sidebar.classList.add('collapsed')
-      collapseBtn.style.display = 'none'
+      collapseBtn.style.display = 'none'  // Hide button when collapsed
       if (collapseIcon) collapseIcon.textContent = '◀'
       localStorage.setItem('sidebarWidth', collapsedWidth)
       localStorage.setItem('sidebarCollapsed', 'true')

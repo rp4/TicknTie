@@ -80,7 +80,7 @@ body {
 
 /* Show just an icon in collapsed state with tooltip */
 #sidebar.collapsed .sidebar-header::after {
-  content: "📌";
+  content: "◀";
   font-size: 20px;
   writing-mode: initial;
   position: relative;
