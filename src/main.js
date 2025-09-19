@@ -28,9 +28,18 @@ async function init() {
       ]
     })
 
-    // Create initial workbook - let Univer handle defaults
+    // Create initial workbook with expanded column count
+    // Default Univer only creates 20 columns (A-T), we need more for proper Excel-like functionality
     const workbook = univerAPI.createUniverSheet({
-      name: 'TicknTie Workbook'
+      name: 'TicknTie Workbook',
+      sheets: {
+        'sheet-01': {
+          id: 'sheet-01',
+          name: 'Sheet1',
+          columnCount: 100,  // Support columns A through CV (100 columns)
+          rowCount: 1000     // Keep default row count
+        }
+      }
     })
 
     // Get the active sheet and try to set column count
