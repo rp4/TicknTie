@@ -394,30 +394,34 @@ class UIComponents {
     renderImagePanel() {
         const panel = document.getElementById('imagePanel');
         if (!panel) return;
-        
+
+        // Check if panel is currently collapsed
+        const isCollapsed = panel.classList.contains('collapsed');
+        const iconDirection = isCollapsed ? '◀' : '▶';
+
         panel.innerHTML = `
             <button class="image-panel-toggle" onclick="UIComponents.toggleImagePanel()">
-                <span id="imagePanelToggleIcon">◀</span>
+                <span id="imagePanelToggleIcon">${iconDirection}</span>
             </button>
-            
+
             <div class="image-panel-header">
                 <div class="image-panel-title">Image Viewer</div>
                 <div class="image-panel-info" id="imagePanelInfo">
                     ${window.ImageManager.getStatistics().totalImages} images
                 </div>
             </div>
-            
+
             <div class="image-panel-tabs">
-                <button class="image-panel-tab ${this.imagePanelTab === 'preview' ? 'active' : ''}" 
+                <button class="image-panel-tab ${this.imagePanelTab === 'preview' ? 'active' : ''}"
                         onclick="UIComponents.switchPanelTab('preview')">
                     Preview
                 </button>
-                <button class="image-panel-tab ${this.imagePanelTab === 'gallery' ? 'active' : ''}" 
+                <button class="image-panel-tab ${this.imagePanelTab === 'gallery' ? 'active' : ''}"
                         onclick="UIComponents.switchPanelTab('gallery')">
                     Gallery
                 </button>
             </div>
-            
+
             <div class="image-panel-content" id="imagePanelContent">
                 ${this.imagePanelTab === 'preview' ? this.renderImagePreview() : this.renderImageGallery()}
             </div>
@@ -511,16 +515,29 @@ class UIComponents {
      * Show image in panel
      */
     showImageInPanel(imageData) {
+        // Switch to preview tab
         this.imagePanelTab = 'preview';
+
+        // Ensure panel is visible first
+        const panel = document.getElementById('imagePanel');
+        if (panel && panel.classList.contains('collapsed')) {
+            UIComponents.toggleImagePanel();
+        }
+
+        // Update the tab buttons to show preview as active
+        const tabs = panel.querySelectorAll('.image-panel-tab');
+        tabs.forEach((tab, index) => {
+            if (index === 0) { // Preview tab
+                tab.classList.add('active');
+            } else { // Gallery tab
+                tab.classList.remove('active');
+            }
+        });
+
+        // Update content to show the image
         const content = document.getElementById('imagePanelContent');
         if (content) {
             content.innerHTML = this.renderImagePreview(imageData);
-        }
-        
-        // Ensure panel is visible
-        const panel = document.getElementById('imagePanel');
-        if (panel && panel.classList.contains('collapsed')) {
-            this.toggleImagePanel();
         }
     }
 
