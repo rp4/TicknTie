@@ -28,17 +28,90 @@ body {
 
 #sidebar {
   width: 350px;
+  min-width: 0;
+  max-width: 800px;
   background: #f8f9fa;
   border-left: 1px solid #dee2e6;
   display: flex;
   flex-direction: column;
   box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  position: relative;
+}
+
+#sidebar.collapsed {
+  width: 40px !important;
+  overflow: hidden;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+#sidebar.collapsed:hover {
+  background: #e9ecef;
+}
+
+#sidebar.collapsed .sidebar-content {
+  display: none;
+}
+
+#sidebar.collapsed .sidebar-header {
+  padding: 10px 5px;
+  background: #667eea;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+#sidebar.collapsed .sidebar-header:hover {
+  background: #5a6fd9;
+}
+
+#sidebar.collapsed .sidebar-header h3 {
+  display: none;
+}
+
+#sidebar.collapsed .btn-primary {
+  display: none;
+}
+
+/* Show just an icon in collapsed state with tooltip */
+#sidebar.collapsed .sidebar-header::after {
+  content: "📌";
+  font-size: 20px;
+  writing-mode: initial;
+  position: relative;
+}
+
+/* Tooltip on hover */
+#sidebar.collapsed:hover::before {
+  content: "Click to expand";
+  position: absolute;
+  left: 45px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* Hide button when sidebar is collapsed - sidebar itself is clickable */
+#sidebar.collapsed ~ .collapse-btn {
+  display: none;
 }
 
 /* Sidebar Header */
 .sidebar-header {
   padding: 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #667eea;
   color: white;
 }
 
@@ -48,6 +121,37 @@ body {
   font-weight: 600;
 }
 
+/* Collapse Button - Left Edge Tab */
+.collapse-btn {
+  position: fixed;
+  right: 350px; /* Position based on default sidebar width */
+  top: 50%;
+  transform: translateY(-50%) translateX(100%);
+  width: 30px;
+  height: 80px;
+  background: #667eea;
+  border: none;
+  border-radius: 6px 0 0 6px;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, right 0.3s;
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+}
+
+.collapse-btn:hover {
+  background: #5a6fd9;
+  transform: translateY(-50%) translateX(calc(100% + 2px));
+}
+
+.collapse-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
 /* Sidebar Content */
 .sidebar-content {
   flex: 1;
@@ -55,27 +159,6 @@ body {
   overflow-y: auto;
 }
 
-/* Cell Info */
-.cell-info {
-  padding: 12px 15px;
-  background: white;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  border-left: 4px solid #667eea;
-}
-
-.cell-info small {
-  display: block;
-  color: #6c757d;
-  font-size: 12px;
-  margin-bottom: 4px;
-}
-
-.cell-info strong {
-  color: #667eea;
-  font-size: 16px;
-}
 
 /* Buttons */
 .btn-primary,
@@ -93,6 +176,7 @@ body {
 .btn-primary {
   background: white;
   color: #667eea;
+  margin-top: 15px;
 }
 
 .btn-primary:hover {
@@ -161,7 +245,18 @@ body {
   width: 100%;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  margin-bottom: 20px;
+  margin-bottom: 10px;
+}
+
+.pdf-notice {
+  background: #f0f4ff;
+  color: #667eea;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin: 0 0 15px 0;
+  text-align: center;
+  font-weight: 500;
 }
 
 /* Image Details */
@@ -184,6 +279,58 @@ body {
 
 .detail-row strong {
   color: #212529;
+}
+
+/* Resize Handle */
+.sidebar-resize-handle {
+  width: 5px;
+  background: transparent;
+  cursor: ew-resize;
+  position: relative;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+/* Hide resize handle when sidebar is collapsed */
+#sidebar.collapsed ~ .sidebar-resize-handle {
+  display: none;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.resizing {
+  background: #dee2e6;
+}
+
+.sidebar-resize-handle.resizing {
+  background: #667eea;
+}
+
+.resize-grip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 30px;
+  border-radius: 3px;
+  background: #adb5bd;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.sidebar-resize-handle:hover .resize-grip,
+.sidebar-resize-handle.resizing .resize-grip {
+  opacity: 1;
+}
+
+/* Prevent text selection during resize */
+body.resizing {
+  cursor: ew-resize;
+  user-select: none;
+}
+
+body.resizing * {
+  user-select: none;
 }
 
 /* Scrollbar Styles */

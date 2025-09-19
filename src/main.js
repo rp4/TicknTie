@@ -28,10 +28,31 @@ async function init() {
       ]
     })
 
-    // Create initial workbook
-    univerAPI.createUniverSheet({
+    // Create initial workbook - let Univer handle defaults
+    const workbook = univerAPI.createUniverSheet({
       name: 'TicknTie Workbook'
     })
+
+    // Get the active sheet and try to set column count
+    try {
+      const activeWorkbook = univerAPI.getActiveWorkbook()
+      if (activeWorkbook) {
+        const sheet = activeWorkbook.getActiveSheet()
+        if (sheet) {
+          console.log('Sheet initialized successfully')
+          // Try to expand the sheet if possible
+          const sheetData = sheet.getSheetData?.()
+          if (sheetData) {
+            console.log('Current sheet dimensions:', {
+              rowCount: sheetData.rowCount,
+              columnCount: sheetData.columnCount
+            })
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Could not access sheet data:', e)
+    }
 
     // Initialize image sidebar plugin
     const imagePlugin = new ImagePlugin(univerAPI)

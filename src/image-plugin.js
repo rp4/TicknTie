@@ -13,6 +13,7 @@ export class ImagePlugin {
 
   async init() {
     this.createSidebar()
+    this.setupResizeHandler()
     this.listenToSelection()
     this.setupImageUpload()
     console.log('📌 Image plugin initialized')
@@ -32,26 +33,35 @@ export class ImagePlugin {
   createSidebar() {
     const sidebar = document.getElementById('sidebar')
 
-    sidebar.innerHTML = `
+    // Add resize handle
+    const resizeHandle = document.createElement('div')
+    resizeHandle.className = 'sidebar-resize-handle'
+    resizeHandle.innerHTML = '<div class="resize-grip"></div>'
+    sidebar.parentNode.insertBefore(resizeHandle, sidebar)
+
+    // Add collapse button OUTSIDE the sidebar (as a sibling)
+    const collapseBtn = document.createElement('button')
+    collapseBtn.id = 'collapseBtn'
+    collapseBtn.className = 'collapse-btn'
+    collapseBtn.title = 'Collapse/Expand sidebar'
+    collapseBtn.innerHTML = '<span class="collapse-icon">▶</span>'
+    sidebar.parentNode.insertBefore(collapseBtn, sidebar)
+
+    sidebar.innerHTML += `
       <div class="sidebar-header">
         <h3>📌 Image Viewer</h3>
         <input
           type="file"
           id="imageInput"
-          accept="image/*"
+          accept="image/*,application/pdf"
           style="display: none;"
         >
         <button id="addImageBtn" class="btn-primary">
-          ➕ Add Image to Cell
+          ➕ Add File to Cell
         </button>
       </div>
 
       <div class="sidebar-content">
-        <div id="cellInfo" class="cell-info">
-          <small>Selected Cell:</small>
-          <strong id="cellRef">None</strong>
-        </div>
-
         <div id="imageContainer" class="image-container">
           <div class="empty-state">
             <div class="empty-icon">🖼️</div>
@@ -77,10 +87,62 @@ export class ImagePlugin {
       })
     }
 
-    // Also poll for selection changes
+    // Also poll for selection changes and check for deleted content
     setInterval(() => {
       this.detectCurrentSelection()
+      this.checkForDeletedCells()
     }, 500)
+  }
+
+  checkForDeletedCells() {
+    try {
+      const workbook = this.univerAPI.getActiveWorkbook()
+      if (!workbook) return
+
+      const worksheet = workbook.getActiveSheet()
+      if (!worksheet) return
+
+      // Check each cell that has an image linked
+      for (const [cellRef, imageId] of this.cellImages.entries()) {
+        const { row, col } = this.parseCellRef(cellRef)
+        const range = worksheet.getRange(row, col)
+
+        if (range) {
+          const value = range.getValue?.() || range.value
+
+          // If cell is empty or doesn't contain the image reference, remove the link
+          if (!value || value === '') {
+            console.log(`Cell ${cellRef} was cleared, removing linked image`)
+            this.removeImageLink(cellRef)
+          }
+        }
+      }
+    } catch (e) {
+      console.debug('Error checking for deleted cells:', e)
+    }
+  }
+
+  removeImageLink(cellRef) {
+    if (!this.cellImages.has(cellRef)) return
+
+    const imageId = this.cellImages.get(cellRef)
+    const imageData = this.imageStore.get(imageId)
+
+    // Clean up image data
+    if (imageData && imageData.url) {
+      URL.revokeObjectURL(imageData.url)
+      this.imageStore.delete(imageId)
+    }
+
+    // Remove the link
+    this.cellImages.delete(cellRef)
+
+    // Update UI if this is the selected cell
+    if (this.selectedCell === cellRef) {
+      this.displayEmptyState()
+    }
+
+    console.log(`✅ Image link removed from cell ${cellRef}`)
   }
 
   detectCurrentSelection() {
@@ -172,57 +234,66 @@ export class ImagePlugin {
     if (!this.selectedCell) return
 
     // Validate file
-    if (!file.type.startsWith('image/')) {
-      alert('Please select a valid image file')
+    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+      alert('Please select a valid image or PDF file')
       return
     }
 
     if (file.size > 10 * 1024 * 1024) { // 10MB limit
-      alert('Image size must be less than 10MB')
+      alert('File size must be less than 10MB')
       return
     }
 
     try {
-      // Create image data
-      const imageId = `img_${Date.now()}`
-      const imageUrl = URL.createObjectURL(file)
+      // Create file data
+      const fileId = `file_${Date.now()}`
+      const fileUrl = URL.createObjectURL(file)
+
+      let previewUrl = fileUrl
+
+      // For PDFs, generate a preview of the first page
+      if (file.type === 'application/pdf') {
+        previewUrl = await this.generatePDFPreview(file)
+      }
 
       const imageData = {
-        id: imageId,
+        id: fileId,
         name: file.name,
         size: file.size,
         type: file.type,
-        url: imageUrl
+        url: fileUrl,
+        previewUrl: previewUrl,
+        isPDF: file.type === 'application/pdf'
       }
 
-      // Store image
-      this.imageStore.set(imageId, imageData)
-      this.cellImages.set(this.selectedCell, imageId)
+      // Store file
+      this.imageStore.set(fileId, imageData)
+      this.cellImages.set(this.selectedCell, fileId)
 
-      // Update cell value
-      await this.updateCellValue(this.selectedCell, `📌 ${file.name}`)
+      // Update cell value with appropriate icon
+      const icon = imageData.isPDF ? '📄' : '📌'
+      await this.updateCellValue(this.selectedCell, `${icon} ${file.name}`)
 
       // Show image
       this.displayImage(imageData)
 
-      console.log(`✅ Image added to cell ${this.selectedCell}`)
+      console.log(`✅ File added to cell ${this.selectedCell}`)
     } catch (error) {
-      console.error('Failed to upload image:', error)
-      alert('Failed to upload image. Please try again.')
+      console.error('Failed to upload file:', error)
+      alert('Failed to upload file. Please try again.')
     }
   }
 
   selectCell(cellRef) {
     this.selectedCell = cellRef
 
-    // Update UI
-    document.getElementById('cellRef').textContent = cellRef || 'None'
-
     // Check for image
     if (this.cellImages.has(cellRef)) {
       const imageId = this.cellImages.get(cellRef)
       const imageData = this.imageStore.get(imageId)
       if (imageData) {
+        // Auto-expand sidebar if collapsed
+        this.expandSidebar()
         this.displayImage(imageData)
       }
     } else {
@@ -233,9 +304,13 @@ export class ImagePlugin {
   displayImage(imageData) {
     const container = document.getElementById('imageContainer')
 
+    // Use preview URL for display (for PDFs, this will be the canvas image)
+    const displayUrl = imageData.previewUrl || imageData.url
+
     container.innerHTML = `
       <div class="image-preview">
-        <img src="${imageData.url}" alt="${imageData.name}">
+        <img src="${displayUrl}" alt="${imageData.name}">
+        ${imageData.isPDF ? '<div class="pdf-notice">📄 PDF Preview (Page 1)</div>' : ''}
 
         <div class="image-details">
           <div class="detail-row">
@@ -252,8 +327,8 @@ export class ImagePlugin {
           </div>
         </div>
 
-        <button class="btn-danger" onclick="window.ticknTie.imagePlugin.removeImage()">
-          🗑️ Remove Image
+        <button class="btn-primary" onclick="window.open('${imageData.url}', '_blank')">
+          📂 Open File
         </button>
       </div>
     `
@@ -264,9 +339,9 @@ export class ImagePlugin {
 
     container.innerHTML = `
       <div class="empty-state">
-        <div class="empty-icon">🖼️</div>
-        <p>No image in this cell</p>
-        <small>Click "Add Image to Cell" to attach one</small>
+        <div class="empty-icon">📁</div>
+        <p>No file in this cell</p>
+        <small>Click "Add File to Cell" to attach one</small>
       </div>
     `
   }
@@ -275,23 +350,11 @@ export class ImagePlugin {
     if (!this.selectedCell || !this.cellImages.has(this.selectedCell)) return
 
     try {
-      const imageId = this.cellImages.get(this.selectedCell)
-      const imageData = this.imageStore.get(imageId)
-
-      // Clean up
-      if (imageData) {
-        URL.revokeObjectURL(imageData.url)
-        this.imageStore.delete(imageId)
-      }
-      this.cellImages.delete(this.selectedCell)
-
-      // Clear cell value
+      // Clear cell value first
       await this.updateCellValue(this.selectedCell, '')
 
-      // Update UI
-      this.displayEmptyState()
-
-      console.log(`✅ Image removed from cell ${this.selectedCell}`)
+      // Remove the image link
+      this.removeImageLink(this.selectedCell)
     } catch (error) {
       console.error('Failed to remove image:', error)
     }
@@ -318,7 +381,13 @@ export class ImagePlugin {
 
   getCellRef(row, col) {
     if (row < 0 || col < 0) return null
-    const colLetter = String.fromCharCode(65 + col)
+    // Convert column number to Excel-style column letters (A, B, ..., Z, AA, AB, ...)
+    let colLetter = ''
+    let colNum = col
+    while (colNum >= 0) {
+      colLetter = String.fromCharCode(65 + (colNum % 26)) + colLetter
+      colNum = Math.floor(colNum / 26) - 1
+    }
     return `${colLetter}${row + 1}`
   }
 
@@ -326,7 +395,14 @@ export class ImagePlugin {
     const match = cellRef.match(/^([A-Z]+)(\d+)$/)
     if (!match) return { row: 0, col: 0 }
 
-    const col = match[1].charCodeAt(0) - 65
+    // Convert Excel-style column letters to column number
+    const colLetters = match[1]
+    let col = 0
+    for (let i = 0; i < colLetters.length; i++) {
+      col = col * 26 + (colLetters.charCodeAt(i) - 64)
+    }
+    col = col - 1 // Convert to 0-based index
+
     const row = parseInt(match[2]) - 1
     return { row, col }
   }
@@ -337,6 +413,217 @@ export class ImagePlugin {
     const sizes = ['Bytes', 'KB', 'MB', 'GB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+  }
+
+  async generatePDFPreview(file) {
+    try {
+      // Get PDF.js from global scope
+      const pdfjsLib = window.pdfjsLib
+      if (!pdfjsLib) {
+        console.error('PDF.js library not loaded')
+        return URL.createObjectURL(file)
+      }
+
+      // Configure worker
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+
+      // Load the PDF
+      const fileUrl = URL.createObjectURL(file)
+      const loadingTask = pdfjsLib.getDocument(fileUrl)
+      const pdf = await loadingTask.promise
+
+      // Get the first page
+      const page = await pdf.getPage(1)
+
+      // Set scale for preview
+      const scale = 1.5
+      const viewport = page.getViewport({ scale })
+
+      // Create canvas for rendering
+      const canvas = document.createElement('canvas')
+      const context = canvas.getContext('2d')
+      canvas.height = viewport.height
+      canvas.width = viewport.width
+
+      // Render the page
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport
+      }
+      await page.render(renderContext).promise
+
+      // Convert canvas to blob and create URL
+      return new Promise((resolve) => {
+        canvas.toBlob((blob) => {
+          const previewUrl = URL.createObjectURL(blob)
+          resolve(previewUrl)
+        }, 'image/png')
+      })
+    } catch (error) {
+      console.error('Failed to generate PDF preview:', error)
+      // Fallback to using the original file URL
+      return URL.createObjectURL(file)
+    }
+  }
+
+  setupResizeHandler() {
+    const sidebar = document.getElementById('sidebar')
+    const resizeHandle = document.querySelector('.sidebar-resize-handle')
+    let isResizing = false
+    let startX = 0
+    let startWidth = 0
+
+    // Get saved width from localStorage or use default
+    const savedWidth = localStorage.getItem('sidebarWidth')
+    const collapseBtn = document.getElementById('collapseBtn')
+
+    if (savedWidth && savedWidth !== '0') {
+      sidebar.style.width = savedWidth + 'px'
+      if (collapseBtn) {
+        collapseBtn.style.right = savedWidth + 'px'
+      }
+    } else if (collapseBtn) {
+      collapseBtn.style.right = '350px' // Default width
+    }
+
+    // Check if sidebar was collapsed
+    const wasCollapsed = localStorage.getItem('sidebarCollapsed') === 'true'
+    if (wasCollapsed) {
+      sidebar.classList.add('collapsed')
+      sidebar.style.width = '40px'
+      if (collapseBtn) {
+        collapseBtn.style.right = '40px'
+        const collapseIcon = collapseBtn.querySelector('.collapse-icon')
+        if (collapseIcon) collapseIcon.textContent = '◀'
+      }
+    }
+
+    // Setup collapse button
+    this.setupCollapseButton()
+
+    resizeHandle.addEventListener('mousedown', (e) => {
+      isResizing = true
+      startX = e.clientX
+      startWidth = sidebar.offsetWidth
+
+      // Add classes for styling during resize
+      document.body.classList.add('resizing')
+      resizeHandle.classList.add('resizing')
+
+      e.preventDefault()
+    })
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return
+
+      // Don't allow resizing if sidebar is collapsed
+      if (sidebar.classList.contains('collapsed')) {
+        isResizing = false
+        return
+      }
+
+      const deltaX = startX - e.clientX
+      const newWidth = startWidth + deltaX
+
+      // Set min and max width constraints
+      const minWidth = 250
+      const maxWidth = 800
+
+      if (newWidth >= minWidth && newWidth <= maxWidth) {
+        sidebar.style.width = newWidth + 'px'
+        sidebar.classList.remove('collapsed')
+        // Update button position
+        const collapseBtn = document.getElementById('collapseBtn')
+        if (collapseBtn) {
+          collapseBtn.style.right = newWidth + 'px'
+        }
+      }
+    })
+
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false
+
+        // Remove styling classes
+        document.body.classList.remove('resizing')
+        resizeHandle.classList.remove('resizing')
+
+        // Save width to localStorage
+        localStorage.setItem('sidebarWidth', sidebar.offsetWidth)
+        // Update button position
+        const collapseBtn = document.getElementById('collapseBtn')
+        if (collapseBtn) {
+          collapseBtn.style.right = sidebar.offsetWidth + 'px'
+        }
+      }
+    })
+
+    // Handle double-click to collapse/expand
+    resizeHandle.addEventListener('dblclick', () => {
+      this.toggleSidebar()
+    })
+  }
+
+  setupCollapseButton() {
+    const sidebar = document.getElementById('sidebar')
+    const collapseBtn = document.getElementById('collapseBtn')
+
+    if (!collapseBtn) return
+
+    collapseBtn.addEventListener('click', () => {
+      this.toggleSidebar()
+    })
+
+    // Make entire sidebar clickable when collapsed
+    sidebar.addEventListener('click', (e) => {
+      if (sidebar.classList.contains('collapsed')) {
+        // Prevent triggering if clicking on something inside when partially visible
+        e.stopPropagation()
+        this.toggleSidebar()
+      }
+    })
+  }
+
+  toggleSidebar() {
+    const sidebar = document.getElementById('sidebar')
+    const collapseBtn = document.getElementById('collapseBtn')
+    const collapseIcon = collapseBtn?.querySelector('.collapse-icon')
+    const collapsedWidth = 40  // Keep a narrow sidebar visible
+    const defaultWidth = 350
+
+    if (sidebar.classList.contains('collapsed')) {
+      // Expand
+      sidebar.style.width = defaultWidth + 'px'
+      sidebar.classList.remove('collapsed')
+      collapseBtn.style.right = defaultWidth + 'px'
+      if (collapseIcon) collapseIcon.textContent = '▶'
+      localStorage.setItem('sidebarWidth', defaultWidth)
+      localStorage.removeItem('sidebarCollapsed')
+    } else {
+      // Collapse
+      sidebar.style.width = collapsedWidth + 'px'
+      sidebar.classList.add('collapsed')
+      collapseBtn.style.right = collapsedWidth + 'px'
+      if (collapseIcon) collapseIcon.textContent = '◀'
+      localStorage.setItem('sidebarWidth', collapsedWidth)
+      localStorage.setItem('sidebarCollapsed', 'true')
+    }
+  }
+
+  expandSidebar() {
+    const sidebar = document.getElementById('sidebar')
+    const collapseBtn = document.getElementById('collapseBtn')
+    const collapseIcon = collapseBtn?.querySelector('.collapse-icon')
+
+    if (sidebar.classList.contains('collapsed')) {
+      const defaultWidth = 350
+      sidebar.style.width = defaultWidth + 'px'
+      sidebar.classList.remove('collapsed')
+      collapseBtn.style.right = defaultWidth + 'px'
+      if (collapseIcon) collapseIcon.textContent = '▶'
+      localStorage.setItem('sidebarWidth', defaultWidth)
+      localStorage.removeItem('sidebarCollapsed')
+    }
   }
 
   // Public API for debugging/extensions
