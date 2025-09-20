@@ -1616,8 +1616,9 @@ https://github.com/yourusername/tickntie
         return null
       }
 
-      // First, collect all data as before
+      // First, collect all data and store actual cell contents
       const data = []
+      const cellContents = new Map() // Store actual cell contents for hyperlink display
       const maxRow = 100
       const maxCol = 26
 
@@ -1628,6 +1629,13 @@ https://github.com/yourusername/tickntie
           try {
             const range = sheet.getRange(r, c)
             const value = range?.getValue?.() || range?.value || ''
+            const cellRef = this.getCellRef(r, c)
+
+            // Store the actual cell content for later use
+            if (value) {
+              cellContents.set(cellRef, value)
+            }
+
             row.push(value)
             if (value) hasData = true
           } catch (e) {
@@ -1653,25 +1661,31 @@ https://github.com/yourusername/tickntie
       for (const [cellRef, evidencePath] of fileMapping.entries()) {
         const linkData = this.cellHyperlinks.get(cellRef)
         if (linkData) {
-          const displayName = linkData.displayText || 'Evidence'
+          // Get the actual cell content that the user sees in Univer
+          let displayText = cellContents.get(cellRef) || ''
+
+          // If no cell content exists, fall back to filename with pushpin
+          if (!displayText) {
+            displayText = `📌 ${linkData.displayText || 'Evidence'}`
+          }
 
           // Set the cell to have both value and hyperlink using the cell object format
           if (ws[cellRef]) {
-            // Create hyperlink using HYPERLINK formula
+            // Create hyperlink using HYPERLINK formula with existing cell content as display
             ws[cellRef] = {
-              f: `HYPERLINK("${evidencePath}","📌 ${displayName}")`,
-              v: `📌 ${displayName}`,
+              f: `HYPERLINK("${evidencePath}","${displayText}")`,
+              v: displayText,
               t: 's'
             }
             hyperlinkCount++
-            console.log(`Added hyperlink to cell ${cellRef}: ${evidencePath}`)
+            console.log(`Added hyperlink to cell ${cellRef}: ${evidencePath} displaying "${displayText}"`)
           } else {
             // Cell doesn't exist in worksheet, need to create it
             const { row, col } = this.parseCellRef(cellRef)
             if (row < data.length) {
               ws[cellRef] = {
-                f: `HYPERLINK("${evidencePath}","📌 ${displayName}")`,
-                v: `📌 ${displayName}`,
+                f: `HYPERLINK("${evidencePath}","${displayText}")`,
+                v: displayText,
                 t: 's'
               }
               hyperlinkCount++
