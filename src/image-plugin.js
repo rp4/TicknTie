@@ -13,6 +13,11 @@ export class ImagePlugin {
     this.isPreloading = false
     this.maxCacheSize = 100 // Maximum number of cached previews
     this.maxCacheAge = 30 * 60 * 1000 // 30 minutes
+    this.maxFileSize = 50 * 1024 * 1024 // 50MB limit
+    this.cleanupInterval = null
+    this.selectionCheckInterval = null
+    this.eventListeners = [] // Track all event listeners for cleanup
+    this.domCache = new Map() // Cache DOM queries
   }
 
   async init() {
@@ -21,64 +26,39 @@ export class ImagePlugin {
     this.listenToSelection()
     this.setupHyperlinkInput()
     this.startCacheCleanup()
-    console.log('📌 Hyperlink image plugin initialized')
+  }
 
-    // Debug: Log available Univer APIs
-    console.log('=== Debugging Univer API ===')
-    console.log('univerAPI:', this.univerAPI)
-
-    const workbook = this.univerAPI.getActiveWorkbook()
-    if (workbook) {
-      console.log('Workbook available, methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(workbook)))
-
-      const sheet = workbook.getActiveSheet()
-      if (sheet) {
-        console.log('Sheet available, methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(sheet)))
-
-        // Try to get selection
-        const selection = sheet.getSelection?.()
-        if (selection) {
-          console.log('Selection available, methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(selection)))
-        }
-      }
+  destroy() {
+    // Clean up all intervals
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval)
+      this.cleanupInterval = null
+    }
+    if (this.selectionCheckInterval) {
+      clearInterval(this.selectionCheckInterval)
+      this.selectionCheckInterval = null
     }
 
-    // Check for internal Univer instance
-    const univer = this.univerAPI._univer || this.univerAPI.getUniver?.() || window.univer
-    if (univer) {
-      console.log('Internal Univer found:', univer)
-      const injector = univer.getInjector?.()
-      if (injector) {
-        console.log('Injector found, trying to get services...')
-        // Try to list available services
-        if (injector.get) {
-          try {
-            // Common Univer service names
-            const services = [
-              'SelectionManagerService',
-              'ICommandService',
-              'IUniverInstanceService',
-              'IRenderManagerService'
-            ]
-            services.forEach(name => {
-              try {
-                const service = injector.get(name)
-                if (service) console.log(`Found service: ${name}`, service)
-              } catch (e) {
-                // Service not found
-              }
-            })
-          } catch (e) {
-            console.log('Could not enumerate services:', e)
-          }
-        }
-      }
+    // Remove all event listeners
+    this.eventListeners.forEach(({ element, event, handler }) => {
+      element.removeEventListener(event, handler)
+    })
+    this.eventListeners = []
+
+    // Clear caches
+    this.previewCache.clear()
+    this.domCache.clear()
+  }
+
+  getDOMElement(id) {
+    if (!this.domCache.has(id)) {
+      this.domCache.set(id, document.getElementById(id))
     }
-    console.log('=== End Debug ===')
+    return this.domCache.get(id)
   }
 
   createSidebar() {
-    const sidebar = document.getElementById('sidebar')
+    const sidebar = this.getDOMElement('sidebar')
 
     // Add resize handle
     const resizeHandle = document.createElement('div')
@@ -94,33 +74,91 @@ export class ImagePlugin {
     collapseBtn.innerHTML = '<span class="collapse-icon">▶</span>'
     sidebar.parentNode.insertBefore(collapseBtn, sidebar)
 
-    sidebar.innerHTML += `
-      <div class="sidebar-header">
-        <h3>Evidence Viewer</h3>
+    // Use textContent and createElement for security
+    const headerDiv = document.createElement('div')
+    headerDiv.className = 'sidebar-header'
 
-        <!-- File Upload (hidden input) -->
-        <input
-          type="file"
-          id="fileInput"
-          accept="image/*,application/pdf"
-          style="display: none;"
-        >
+    // Header with title and download button
+    const headerTop = document.createElement('div')
+    headerTop.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;'
 
-        <button id="addFileBtn" class="btn-primary">
-          ➕ Add Evidence
-        </button>
-      </div>
+    const h3 = document.createElement('h3')
+    h3.textContent = 'Evidence Viewer'
+    h3.style.margin = '0'
+    headerTop.appendChild(h3)
 
-      <div class="sidebar-content">
-        <div id="imageContainer" class="image-container">
-          <div class="empty-state">
-            <div class="empty-icon">📁</div>
-            <p>No evidence in this cell</p>
-            <small>Select a cell and add evidence</small>
-          </div>
-        </div>
-      </div>
+    // Download project button
+    const downloadBtn = document.createElement('button')
+    downloadBtn.id = 'downloadProjectBtn'
+    downloadBtn.style.cssText = `
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: white;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: background 0.2s;
     `
+    downloadBtn.innerHTML = '💾 Export'
+    downloadBtn.title = 'Download project as ZIP'
+    downloadBtn.onmouseover = () => { downloadBtn.style.background = 'rgba(255, 255, 255, 0.3)' }
+    downloadBtn.onmouseout = () => { downloadBtn.style.background = 'rgba(255, 255, 255, 0.2)' }
+    downloadBtn.onclick = () => this.downloadProject()
+    headerTop.appendChild(downloadBtn)
+
+    headerDiv.appendChild(headerTop)
+
+    const fileInput = document.createElement('input')
+    fileInput.type = 'file'
+    fileInput.id = 'fileInput'
+    fileInput.accept = 'image/*,application/pdf'
+    fileInput.style.display = 'none'
+    headerDiv.appendChild(fileInput)
+
+    const addFileBtn = document.createElement('button')
+    addFileBtn.id = 'addFileBtn'
+    addFileBtn.className = 'btn-primary'
+    addFileBtn.textContent = '➕ Add Evidence'
+    headerDiv.appendChild(addFileBtn)
+
+    // Import project button
+    const importBtn = document.createElement('button')
+    importBtn.id = 'importProjectBtn'
+    importBtn.className = 'btn-primary'
+    importBtn.textContent = '📥 Import Project'
+    importBtn.style.marginTop = '10px'
+    importBtn.onclick = () => this.showImportDialog()
+    headerDiv.appendChild(importBtn)
+
+    const contentDiv = document.createElement('div')
+    contentDiv.className = 'sidebar-content'
+
+    const imageContainer = document.createElement('div')
+    imageContainer.id = 'imageContainer'
+    imageContainer.className = 'image-container'
+
+    const emptyState = document.createElement('div')
+    emptyState.className = 'empty-state'
+    const emptyIcon = document.createElement('div')
+    emptyIcon.className = 'empty-icon'
+    emptyIcon.textContent = '📁'
+    const emptyP = document.createElement('p')
+    emptyP.textContent = 'No evidence in this cell'
+    const emptySmall = document.createElement('small')
+    emptySmall.textContent = 'Select a cell and add evidence'
+    emptyState.appendChild(emptyIcon)
+    emptyState.appendChild(emptyP)
+    emptyState.appendChild(emptySmall)
+
+    imageContainer.appendChild(emptyState)
+    contentDiv.appendChild(imageContainer)
+
+    sidebar.appendChild(headerDiv)
+    sidebar.appendChild(contentDiv)
 
     // Add styles for new elements
     const style = document.createElement('style')
@@ -218,11 +256,13 @@ export class ImagePlugin {
       })
     }
 
-    // Poll for selection changes and content deletion
-    setInterval(() => {
-      this.detectCurrentSelection()
-      this.checkForDeletedContent()
-    }, 500)
+    // Smart polling - only when document is visible
+    this.selectionCheckInterval = setInterval(() => {
+      if (!document.hidden) {
+        this.detectCurrentSelection()
+        this.checkForDeletedContent()
+      }
+    }, 1000) // Reduced frequency
 
     // Initial detection after a short delay
     setTimeout(() => {
@@ -252,12 +292,11 @@ export class ImagePlugin {
 
             // If cell is empty or doesn't contain the pushpin icon, remove the hyperlink
             if (!value || value === '' || !value.includes('📌')) {
-              console.log(`Cell ${cellRef} was cleared, removing hyperlink`)
               cellsToRemove.push(cellRef)
             }
           }
         } catch (e) {
-          console.debug('Error checking cell:', cellRef, e)
+          // Silent error handling
         }
       }
 
@@ -267,7 +306,7 @@ export class ImagePlugin {
       })
 
     } catch (e) {
-      console.debug('Error checking for deleted content:', e)
+      // Silent error handling
     }
   }
 
@@ -283,7 +322,7 @@ export class ImagePlugin {
       this.displayEmptyState()
     }
 
-    console.log(`✅ Hyperlink removed from cell ${cellRef}`)
+    // Silent removal
   }
 
   detectCurrentSelection() {
@@ -291,13 +330,11 @@ export class ImagePlugin {
       // Method 1: Try to get selection from Univer API
       const workbook = this.univerAPI.getActiveWorkbook()
       if (!workbook) {
-        console.debug('No active workbook')
         return
       }
 
       const worksheet = workbook.getActiveSheet()
       if (!worksheet) {
-        console.debug('No active worksheet')
         return
       }
 
@@ -311,7 +348,6 @@ export class ImagePlugin {
           const cellRef = this.getCellRef(row, col)
 
           if (cellRef && cellRef !== this.selectedCell) {
-            console.log('Selection changed to:', cellRef)
             this.selectCell(cellRef)
           }
           return
@@ -348,7 +384,6 @@ export class ImagePlugin {
                     const cellRef = this.getCellRef(row, col)
 
                     if (cellRef && cellRef !== this.selectedCell) {
-                      console.log('Selection changed to:', cellRef, '(from service)')
                       this.selectCell(cellRef)
                     }
                     return
@@ -371,39 +406,56 @@ export class ImagePlugin {
         if (!isNaN(row) && !isNaN(col)) {
           const cellRef = this.getCellRef(row, col)
           if (cellRef && cellRef !== this.selectedCell) {
-            console.log('Selection changed to:', cellRef, '(from DOM)')
             this.selectCell(cellRef)
           }
         }
       }
 
     } catch (e) {
-      console.debug('Selection detection error:', e)
+      // Silent error handling
     }
   }
 
   setupHyperlinkInput() {
-    const addFileBtn = document.getElementById('addFileBtn')
-    const fileInput = document.getElementById('fileInput')
+    const addFileBtn = this.getDOMElement('addFileBtn')
+    const fileInput = this.getDOMElement('fileInput')
 
     // Add file button - directly opens file picker
-    addFileBtn.addEventListener('click', () => {
+    const clickHandler = () => {
       if (!this.selectedCell) {
         alert('Please select a cell first')
         return
       }
       fileInput.click()
-    })
+    }
+    addFileBtn.addEventListener('click', clickHandler)
+    this.eventListeners.push({ element: addFileBtn, event: 'click', handler: clickHandler })
 
-    // File input change - immediately process the file
-    fileInput.addEventListener('change', async (e) => {
+    // File input change with validation
+    const changeHandler = async (e) => {
       const file = e.target.files[0]
       if (file) {
+        // Validate file type first
+        const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf']
+        if (!validTypes.includes(file.type) && !file.name.match(/\.(jpg|jpeg|png|gif|webp|pdf)$/i)) {
+          alert('Invalid file type. Please upload an image or PDF.')
+          fileInput.value = ''
+          return
+        }
+
+        // Only enforce size limit for images (PDFs only render first page anyway)
+        if (!file.type.includes('pdf') && file.size > this.maxFileSize) {
+          alert(`Image file too large. Maximum size is ${this.maxFileSize / 1024 / 1024}MB`)
+          fileInput.value = ''
+          return
+        }
+
         await this.handleFileUpload(file)
-        // Reset input for next use
         fileInput.value = ''
       }
-    })
+    }
+    fileInput.addEventListener('change', changeHandler)
+    this.eventListeners.push({ element: fileInput, event: 'change', handler: changeHandler })
   }
 
   async handleFileUpload(file) {
@@ -417,18 +469,64 @@ export class ImagePlugin {
       // Add to cell
       await this.addHyperlinkToCell(url, displayText)
 
-      console.log(`✅ File added to cell ${this.selectedCell}`)
+      // Silent success
     } catch (error) {
-      console.error('Failed to upload file:', error)
+      // Silent error
       alert('Failed to upload file. Please try again.')
     }
   }
 
-  // Convert file to data URL
+  // Convert file to compressed data URL
   async fileToDataUrl(file) {
+    // For images, compress them
+    if (file.type.startsWith('image/')) {
+      return this.compressImage(file)
+    }
+
+    // For PDFs and other files, use regular data URL
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = (e) => resolve(e.target.result)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  async compressImage(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      const reader = new FileReader()
+
+      reader.onload = (e) => {
+        img.src = e.target.result
+      }
+
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+
+        // Max dimensions for storage
+        const maxWidth = 1920
+        const maxHeight = 1080
+
+        let width = img.width
+        let height = img.height
+
+        if (width > maxWidth || height > maxHeight) {
+          const scale = Math.min(maxWidth / width, maxHeight / height)
+          width *= scale
+          height *= scale
+        }
+
+        canvas.width = width
+        canvas.height = height
+        ctx.drawImage(img, 0, 0, width, height)
+
+        // Convert to JPEG with compression
+        resolve(canvas.toDataURL('image/jpeg', 0.85))
+      }
+
+      img.onerror = reject
       reader.onerror = reject
       reader.readAsDataURL(file)
     })
@@ -449,9 +547,9 @@ export class ImagePlugin {
       await this.displayPreview(url, displayText)
       this.preloadAdjacentCells(this.selectedCell)
 
-      console.log(`✅ Hyperlink added to cell ${this.selectedCell}`)
+      // Silent success
     } catch (error) {
-      console.error('Failed to add hyperlink:', error)
+      // Silent error
       alert('Failed to add hyperlink. Please try again.')
     }
   }
@@ -473,7 +571,7 @@ export class ImagePlugin {
   }
 
   async displayPreview(url, displayText) {
-    const container = document.getElementById('imageContainer')
+    const container = this.getDOMElement('imageContainer')
 
     // Check cache first
     if (this.previewCache.has(url)) {
@@ -484,14 +582,24 @@ export class ImagePlugin {
       return
     }
 
-    // Show loading state
-    container.innerHTML = `
-      <div class="preview-loading">
-        <div class="loading-spinner"></div>
-        <p>Loading preview...</p>
-        <small>${displayText}</small>
-      </div>
-    `
+    // Show loading state safely
+    const loadingDiv = document.createElement('div')
+    loadingDiv.className = 'preview-loading'
+
+    const spinner = document.createElement('div')
+    spinner.className = 'loading-spinner'
+    loadingDiv.appendChild(spinner)
+
+    const loadingText = document.createElement('p')
+    loadingText.textContent = 'Loading preview...'
+    loadingDiv.appendChild(loadingText)
+
+    const fileName = document.createElement('small')
+    fileName.textContent = displayText
+    loadingDiv.appendChild(fileName)
+
+    container.innerHTML = ''
+    container.appendChild(loadingDiv)
 
     try {
       const preview = await this.fetchPreview(url)
@@ -501,7 +609,7 @@ export class ImagePlugin {
         this.showPreviewContent(preview, url, displayText)
       }
     } catch (error) {
-      console.error('Failed to load preview:', error)
+      // Silent error
       this.showErrorState(url, displayText, error.message)
     }
   }
@@ -525,67 +633,30 @@ export class ImagePlugin {
   }
 
   async fetchDataUrlPreview(dataUrl) {
-    // Determine type from data URL
     const isPdf = dataUrl.startsWith('data:application/pdf')
 
     if (isPdf) {
-      // For PDF data URLs, we need to convert to blob first
-      const response = await fetch(dataUrl)
-      const blob = await response.blob()
-      const objectUrl = URL.createObjectURL(blob)
-
-      try {
-        const preview = await this.fetchPDFPreview(objectUrl)
-        URL.revokeObjectURL(objectUrl)
-        return preview
-      } catch (error) {
-        URL.revokeObjectURL(objectUrl)
-        throw error
-      }
+      return this.createPDFPreviewFromDataUrl(dataUrl)
     } else {
-      // For image data URLs, use directly
-      return new Promise((resolve) => {
-        const img = new Image()
-
-        img.onload = () => {
-          // Create canvas for preview (max 800px wide/tall)
-          const canvas = document.createElement('canvas')
-          const ctx = canvas.getContext('2d')
-          const maxSize = 800
-
-          let width = img.width
-          let height = img.height
-
-          if (width > maxSize || height > maxSize) {
-            const scale = Math.min(maxSize / width, maxSize / height)
-            width *= scale
-            height *= scale
-          }
-
-          canvas.width = width
-          canvas.height = height
-          ctx.drawImage(img, 0, 0, width, height)
-
-          resolve({
-            dataUrl: canvas.toDataURL('image/jpeg', 0.9),
-            width,
-            height,
-            type: 'image'
-          })
-        }
-
-        img.src = dataUrl
-      })
+      return this.createImagePreview(dataUrl)
     }
   }
 
   async fetchImagePreview(url) {
-    return new Promise((resolve, reject) => {
+    return this.createImagePreview(url).catch(() => {
+      throw new Error('Failed to load image')
+    })
+  }
+
+  // Unified image preview creation function
+  async createImagePreview(url) {
+    return new Promise((resolve) => {
       const img = new Image()
-      img.crossOrigin = 'anonymous' // Handle CORS if possible
+      if (!url.startsWith('data:')) {
+        img.crossOrigin = 'anonymous' // Handle CORS if possible
+      }
 
       img.onload = () => {
-        // Create canvas for preview (max 800px wide/tall)
         const canvas = document.createElement('canvas')
         const ctx = canvas.getContext('2d')
         const maxSize = 800
@@ -603,7 +674,6 @@ export class ImagePlugin {
         canvas.height = height
         ctx.drawImage(img, 0, 0, width, height)
 
-        // Convert to data URL for caching
         resolve({
           dataUrl: canvas.toDataURL('image/jpeg', 0.9),
           width,
@@ -613,11 +683,26 @@ export class ImagePlugin {
       }
 
       img.onerror = () => {
-        reject(new Error('Failed to load image'))
+        resolve(null)
       }
 
       img.src = url
     })
+  }
+
+  async createPDFPreviewFromDataUrl(dataUrl) {
+    const response = await fetch(dataUrl)
+    const blob = await response.blob()
+    const objectUrl = URL.createObjectURL(blob)
+
+    try {
+      const preview = await this.fetchPDFPreview(objectUrl)
+      URL.revokeObjectURL(objectUrl)
+      return preview
+    } catch (error) {
+      URL.revokeObjectURL(objectUrl)
+      throw error
+    }
   }
 
   async fetchPDFPreview(url) {
@@ -679,37 +764,282 @@ export class ImagePlugin {
   }
 
   showPreviewContent(preview, url, displayText) {
-    const container = document.getElementById('imageContainer')
+    const container = this.getDOMElement('imageContainer')
+    container.innerHTML = ''
 
-    container.innerHTML = `
-      <div class="image-preview">
-        <img src="${preview.dataUrl}" alt="${displayText}" style="max-width: 100%; height: auto;">
-        ${preview.type === 'pdf' ? `<div class="pdf-notice">📄 PDF Preview (Page 1 of ${preview.pageCount || '?'})</div>` : ''}
+    const previewDiv = document.createElement('div')
+    previewDiv.className = 'image-preview'
 
-        <button class="btn-primary" onclick="window.open('${url}', '_blank')" style="width: 100%; margin-top: 10px;">
-          🔗 Open Link
-        </button>
-      </div>
+    // Make image clickable for fullscreen view
+    const img = document.createElement('img')
+    img.src = preview.dataUrl
+    img.alt = displayText
+    img.style.maxWidth = '100%'
+    img.style.height = 'auto'
+    img.style.cursor = 'zoom-in'
+    img.title = 'Click to view fullscreen'
+    img.onclick = () => this.showFullscreenView(url, displayText, preview.type)
+    previewDiv.appendChild(img)
+
+    if (preview.type === 'pdf') {
+      const pdfNotice = document.createElement('div')
+      pdfNotice.className = 'pdf-notice'
+      pdfNotice.textContent = `📄 PDF Preview (Page 1 of ${preview.pageCount || '?'})`
+      previewDiv.appendChild(pdfNotice)
+    }
+
+    // View fullscreen button
+    const viewBtn = document.createElement('button')
+    viewBtn.className = 'btn-primary'
+    viewBtn.style.width = '100%'
+    viewBtn.style.marginTop = '10px'
+    viewBtn.textContent = '🔍 View Fullscreen'
+    viewBtn.onclick = () => this.showFullscreenView(url, displayText, preview.type)
+    previewDiv.appendChild(viewBtn)
+
+    container.appendChild(previewDiv)
+  }
+
+  showFullscreenView(url, filename, type) {
+    // Create fullscreen overlay
+    const overlay = document.createElement('div')
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
     `
+
+    // Header with filename and close button
+    const header = document.createElement('div')
+    header.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 15px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    `
+
+    const title = document.createElement('span')
+    title.textContent = filename
+    title.style.fontSize = '16px'
+    header.appendChild(title)
+
+    const closeBtn = document.createElement('button')
+    closeBtn.textContent = '✕'
+    closeBtn.style.cssText = `
+      background: none;
+      border: none;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0 10px;
+    `
+    closeBtn.onclick = () => document.body.removeChild(overlay)
+    header.appendChild(closeBtn)
+
+    overlay.appendChild(header)
+
+    // Content area
+    const content = document.createElement('div')
+    content.style.cssText = `
+      max-width: 90vw;
+      max-height: 85vh;
+      overflow: auto;
+      margin-top: 60px;
+      position: relative;
+    `
+
+    if (type === 'pdf') {
+      // Show loading spinner for PDFs
+      const loadingContainer = document.createElement('div')
+      loadingContainer.style.cssText = `
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        color: white;
+      `
+
+      const spinner = document.createElement('div')
+      spinner.style.cssText = `
+        width: 50px;
+        height: 50px;
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+      `
+
+      const loadingText = document.createElement('div')
+      loadingText.textContent = 'Loading PDF...'
+      loadingText.style.fontSize = '16px'
+
+      loadingContainer.appendChild(spinner)
+      loadingContainer.appendChild(loadingText)
+      content.appendChild(loadingContainer)
+
+      // For PDFs, show embedded viewer
+      const embed = document.createElement('embed')
+      embed.src = url
+      embed.type = 'application/pdf'
+      embed.style.cssText = `
+        width: 90vw;
+        height: 85vh;
+      `
+
+      // Hide loading when PDF loads
+      embed.onload = () => {
+        if (loadingContainer.parentNode) {
+          content.removeChild(loadingContainer)
+        }
+      }
+
+      // Also hide loading after a timeout (fallback for browsers that don't fire onload for embed)
+      setTimeout(() => {
+        if (loadingContainer.parentNode) {
+          content.removeChild(loadingContainer)
+        }
+      }, 2000)
+
+      content.appendChild(embed)
+    } else {
+      // Show loading for large images too
+      const loadingContainer = document.createElement('div')
+      loadingContainer.style.cssText = `
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        color: white;
+      `
+
+      const spinner = document.createElement('div')
+      spinner.style.cssText = `
+        width: 50px;
+        height: 50px;
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+      `
+
+      const loadingText = document.createElement('div')
+      loadingText.textContent = 'Loading image...'
+      loadingText.style.fontSize = '16px'
+
+      loadingContainer.appendChild(spinner)
+      loadingContainer.appendChild(loadingText)
+      content.appendChild(loadingContainer)
+
+      // For images, show full resolution
+      const img = document.createElement('img')
+      img.style.cssText = `
+        max-width: 90vw;
+        max-height: 85vh;
+        object-fit: contain;
+        display: none;
+      `
+
+      img.onload = () => {
+        if (loadingContainer.parentNode) {
+          content.removeChild(loadingContainer)
+        }
+        img.style.display = 'block'
+      }
+
+      img.onerror = () => {
+        if (loadingContainer.parentNode) {
+          loadingText.textContent = 'Failed to load image'
+          spinner.style.display = 'none'
+        }
+      }
+
+      img.src = url
+      content.appendChild(img)
+    }
+
+    overlay.appendChild(content)
+
+    // Close on ESC key
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') {
+        document.body.removeChild(overlay)
+        document.removeEventListener('keydown', handleEsc)
+      }
+    }
+    document.addEventListener('keydown', handleEsc)
+
+    // Close on overlay click (but not content)
+    overlay.onclick = (e) => {
+      if (e.target === overlay) {
+        document.body.removeChild(overlay)
+        document.removeEventListener('keydown', handleEsc)
+      }
+    }
+
+    document.body.appendChild(overlay)
   }
 
   showErrorState(url, displayText, errorMessage) {
-    const container = document.getElementById('imageContainer')
+    const container = this.getDOMElement('imageContainer')
+    container.innerHTML = ''
 
-    container.innerHTML = `
-      <div class="preview-error">
-        <div class="error-icon">⚠️</div>
-        <p><strong>Failed to load preview</strong></p>
-        <small>${displayText}</small>
-        <small style="color: #666;">${errorMessage}</small>
-        <button class="retry-btn" onclick="window.ticknTie.imagePlugin.retryPreview('${url}', '${displayText}')">
-          Retry
-        </button>
-        <button class="btn-primary" onclick="window.open('${url}', '_blank')" style="margin-top: 8px; width: 100%;">
-          🔗 Open Link Anyway
-        </button>
-      </div>
-    `
+    const errorDiv = document.createElement('div')
+    errorDiv.className = 'preview-error'
+
+    const errorIcon = document.createElement('div')
+    errorIcon.className = 'error-icon'
+    errorIcon.textContent = '⚠️'
+    errorDiv.appendChild(errorIcon)
+
+    const errorTitle = document.createElement('p')
+    const strong = document.createElement('strong')
+    strong.textContent = 'Failed to load preview'
+    errorTitle.appendChild(strong)
+    errorDiv.appendChild(errorTitle)
+
+    const fileName = document.createElement('small')
+    fileName.textContent = displayText
+    errorDiv.appendChild(fileName)
+
+    const errorMsg = document.createElement('small')
+    errorMsg.style.color = '#666'
+    errorMsg.textContent = errorMessage
+    errorDiv.appendChild(errorMsg)
+
+    const retryBtn = document.createElement('button')
+    retryBtn.className = 'retry-btn'
+    retryBtn.textContent = 'Retry'
+    retryBtn.onclick = () => this.retryPreview(url, displayText)
+    errorDiv.appendChild(retryBtn)
+
+    const viewBtn = document.createElement('button')
+    viewBtn.className = 'btn-primary'
+    viewBtn.style.marginTop = '8px'
+    viewBtn.style.width = '100%'
+    viewBtn.textContent = '🔍 Try Fullscreen View'
+    viewBtn.onclick = () => this.showFullscreenView(url, displayText, 'image')
+    errorDiv.appendChild(viewBtn)
+
+    container.appendChild(errorDiv)
   }
 
   async retryPreview(url, displayText) {
@@ -719,30 +1049,28 @@ export class ImagePlugin {
   }
 
   displayEmptyState() {
-    const container = document.getElementById('imageContainer')
+    const container = this.getDOMElement('imageContainer')
+    container.innerHTML = ''
 
-    container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">📁</div>
-        <p>No evidence in this cell</p>
-        <small>Click "Add Evidence" to attach a file</small>
-      </div>
-    `
+    const emptyDiv = document.createElement('div')
+    emptyDiv.className = 'empty-state'
+
+    const emptyIcon = document.createElement('div')
+    emptyIcon.className = 'empty-icon'
+    emptyIcon.textContent = '📁'
+    emptyDiv.appendChild(emptyIcon)
+
+    const emptyText = document.createElement('p')
+    emptyText.textContent = 'No evidence in this cell'
+    emptyDiv.appendChild(emptyText)
+
+    const emptyHelp = document.createElement('small')
+    emptyHelp.textContent = 'Click "Add Evidence" to attach a file'
+    emptyDiv.appendChild(emptyHelp)
+
+    container.appendChild(emptyDiv)
   }
 
-  async removeHyperlink() {
-    if (!this.selectedCell || !this.cellHyperlinks.has(this.selectedCell)) return
-
-    try {
-      // Clear cell value
-      await this.updateCellValue(this.selectedCell, '')
-
-      // Use the common removal method
-      this.removeHyperlinkFromCell(this.selectedCell)
-    } catch (error) {
-      console.error('Failed to remove hyperlink:', error)
-    }
-  }
 
   // Smart adjacent preloading
   preloadAdjacentCells(cellRef) {
@@ -792,7 +1120,7 @@ export class ImagePlugin {
         }
       }
     } catch (error) {
-      console.debug('Preload failed:', item.url, error)
+      // Silent preload failure
     }
 
     // Continue with next item
@@ -834,13 +1162,17 @@ export class ImagePlugin {
 
   startCacheCleanup() {
     // Clean old cache entries every 5 minutes
-    setInterval(() => {
+    this.cleanupInterval = setInterval(() => {
       const now = Date.now()
+      const toDelete = []
+
       for (const [url, data] of this.previewCache) {
         if (now - data.timestamp > this.maxCacheAge) {
-          this.previewCache.delete(url)
+          toDelete.push(url)
         }
       }
+
+      toDelete.forEach(url => this.previewCache.delete(url))
     }, 5 * 60 * 1000)
   }
 
@@ -860,7 +1192,7 @@ export class ImagePlugin {
         range.setValue(value)
       }
     } catch (e) {
-      console.warn('Failed to update cell value:', e)
+      // Silent error
     }
   }
 
@@ -890,15 +1222,6 @@ export class ImagePlugin {
     return { row, col }
   }
 
-  getFileNameFromUrl(url) {
-    try {
-      const urlObj = new URL(url)
-      const pathname = urlObj.pathname
-      return pathname.substring(pathname.lastIndexOf('/') + 1) || 'Link'
-    } catch {
-      return url.substring(url.lastIndexOf('/') + 1) || 'Link'
-    }
-  }
 
   getFileType(url) {
     // Handle data URLs
@@ -923,7 +1246,7 @@ export class ImagePlugin {
 
   // Sidebar UI methods (resize, collapse, etc.)
   setupResizeHandler() {
-    const sidebar = document.getElementById('sidebar')
+    const sidebar = this.getDOMElement('sidebar')
     const resizeHandle = document.querySelector('.sidebar-resize-handle')
     let isResizing = false
     let startX = 0
@@ -951,6 +1274,24 @@ export class ImagePlugin {
         collapseBtn.style.display = 'none'
         const collapseIcon = collapseBtn.querySelector('.collapse-icon')
         if (collapseIcon) collapseIcon.textContent = '◀'
+      }
+      // Style download button for collapsed state
+      const downloadBtn = document.getElementById('downloadProjectBtn')
+      if (downloadBtn) {
+        downloadBtn.innerHTML = '💾'
+        downloadBtn.style.cssText = `
+          background: transparent;
+          border: none;
+          color: white;
+          padding: 5px;
+          cursor: pointer;
+          font-size: 18px;
+          position: absolute;
+          top: 10px;
+          left: 50%;
+          transform: translateX(-50%);
+          transition: transform 0.2s;
+        `
       }
     }
 
@@ -1014,27 +1355,30 @@ export class ImagePlugin {
   }
 
   setupCollapseButton() {
-    const sidebar = document.getElementById('sidebar')
-    const collapseBtn = document.getElementById('collapseBtn')
+    const sidebar = this.getDOMElement('sidebar')
+    const collapseBtn = this.getDOMElement('collapseBtn')
 
     if (!collapseBtn) return
 
-    collapseBtn.addEventListener('click', () => {
-      this.toggleSidebar()
-    })
+    const toggleHandler = () => this.toggleSidebar()
+    collapseBtn.addEventListener('click', toggleHandler)
+    this.eventListeners.push({ element: collapseBtn, event: 'click', handler: toggleHandler })
 
-    sidebar.addEventListener('click', (e) => {
+    const sidebarHandler = (e) => {
       if (sidebar.classList.contains('collapsed')) {
         e.stopPropagation()
         this.toggleSidebar()
       }
-    })
+    }
+    sidebar.addEventListener('click', sidebarHandler)
+    this.eventListeners.push({ element: sidebar, event: 'click', handler: sidebarHandler })
   }
 
   toggleSidebar() {
-    const sidebar = document.getElementById('sidebar')
-    const collapseBtn = document.getElementById('collapseBtn')
+    const sidebar = this.getDOMElement('sidebar')
+    const collapseBtn = this.getDOMElement('collapseBtn')
     const collapseIcon = collapseBtn?.querySelector('.collapse-icon')
+    const downloadBtn = document.getElementById('downloadProjectBtn')
     const collapsedWidth = 40
     const defaultWidth = 350
 
@@ -1045,6 +1389,25 @@ export class ImagePlugin {
       collapseBtn.style.right = `${defaultWidth}px`
       collapseBtn.style.display = 'flex'  // Show button when expanded
       if (collapseIcon) collapseIcon.textContent = '▶'
+      if (downloadBtn) {
+        downloadBtn.innerHTML = '💾 Export'
+        downloadBtn.style.cssText = `
+          background: rgba(255, 255, 255, 0.2);
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          color: white;
+          padding: 6px 12px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 13px;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          transition: background 0.2s;
+          position: static;
+          top: auto;
+          right: auto;
+        `
+      }
       localStorage.setItem('sidebarWidth', defaultWidth)
       localStorage.removeItem('sidebarCollapsed')
     } else {
@@ -1053,15 +1416,32 @@ export class ImagePlugin {
       sidebar.classList.add('collapsed')
       collapseBtn.style.display = 'none'  // Hide button when collapsed
       if (collapseIcon) collapseIcon.textContent = '◀'
+      if (downloadBtn) {
+        downloadBtn.innerHTML = '💾'
+        downloadBtn.style.cssText = `
+          background: transparent;
+          border: none;
+          color: white;
+          padding: 5px;
+          cursor: pointer;
+          font-size: 18px;
+          position: absolute;
+          top: 10px;
+          left: 50%;
+          transform: translateX(-50%);
+          transition: transform 0.2s;
+        `
+      }
       localStorage.setItem('sidebarWidth', collapsedWidth)
       localStorage.setItem('sidebarCollapsed', 'true')
     }
   }
 
   expandSidebar() {
-    const sidebar = document.getElementById('sidebar')
-    const collapseBtn = document.getElementById('collapseBtn')
+    const sidebar = this.getDOMElement('sidebar')
+    const collapseBtn = this.getDOMElement('collapseBtn')
     const collapseIcon = collapseBtn?.querySelector('.collapse-icon')
+    const downloadBtn = document.getElementById('downloadProjectBtn')
 
     if (sidebar.classList.contains('collapsed')) {
       const defaultWidth = 350
@@ -1070,22 +1450,734 @@ export class ImagePlugin {
       collapseBtn.style.right = `${defaultWidth}px`
       collapseBtn.style.display = 'flex'
       if (collapseIcon) collapseIcon.textContent = '▶'
+      if (downloadBtn) {
+        downloadBtn.innerHTML = '💾 Export'
+        downloadBtn.style.cssText = `
+          background: rgba(255, 255, 255, 0.2);
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          color: white;
+          padding: 6px 12px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 13px;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          transition: background 0.2s;
+          position: static;
+          top: auto;
+          right: auto;
+        `
+      }
       localStorage.setItem('sidebarWidth', defaultWidth)
       localStorage.removeItem('sidebarCollapsed')
     }
   }
 
-  // Public API for debugging
-  getCacheInfo() {
-    return {
-      size: this.previewCache.size,
-      urls: Array.from(this.previewCache.keys()),
-      totalSize: Array.from(this.previewCache.values()).reduce((sum, item) => sum + item.size, 0)
+  async downloadProject() {
+    try {
+      // Import JSZip dynamically
+      const JSZip = (await import('jszip')).default
+      const zip = new JSZip()
+
+      // Create project name with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      const projectName = `TicknTie_Project_${timestamp}`
+
+      // Get spreadsheet data from Univer
+      const workbook = this.univerAPI.getActiveWorkbook()
+      if (!workbook) {
+        alert('No workbook found to export')
+        return
+      }
+
+      // Create evidence folder and prepare file mapping FIRST
+      const evidenceFolder = zip.folder('evidence')
+      const fileMapping = new Map() // Map cellRef to evidence file path
+      const usedFileNames = new Set()
+      let fileCounter = 1
+
+      // Process each hyperlink and create evidence files
+      for (const [cellRef, linkData] of this.cellHyperlinks) {
+        const { url, displayText } = linkData
+
+        if (url.startsWith('data:')) {
+          // Use original filename if available, otherwise generate one
+          let fileName = displayText
+
+          // Sanitize filename (remove invalid characters)
+          fileName = fileName.replace(/[<>:"/\\|?*]/g, '_')
+
+          // Ensure unique filename
+          let finalFileName = fileName
+          let counter = 1
+          while (usedFileNames.has(finalFileName)) {
+            const nameParts = fileName.split('.')
+            if (nameParts.length > 1) {
+              const ext = nameParts.pop()
+              const base = nameParts.join('.')
+              finalFileName = `${base}_${counter}.${ext}`
+            } else {
+              finalFileName = `${fileName}_${counter}`
+            }
+            counter++
+          }
+          usedFileNames.add(finalFileName)
+
+          // Extract base64 data and convert to blob
+          const base64Data = url.split(',')[1]
+          const mimeType = url.match(/data:([^;]+)/)?.[1] || 'application/octet-stream'
+          const byteCharacters = atob(base64Data)
+          const byteNumbers = new Array(byteCharacters.length)
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i)
+          }
+          const byteArray = new Uint8Array(byteNumbers)
+          const blob = new Blob([byteArray], { type: mimeType })
+
+          // Add file to evidence folder
+          evidenceFolder.file(finalFileName, blob)
+          fileMapping.set(cellRef, `evidence/${finalFileName}`)
+
+          fileCounter++
+        }
+      }
+
+      // Export Excel file with hyperlinks
+      console.log('Exporting Excel file with hyperlinks...')
+      const excelBlob = await this.exportExcelWithHyperlinks(workbook, fileMapping)
+      if (excelBlob) {
+        // Always use .xlsx extension now that we're using SheetJS
+        const filename = 'workbook.xlsx'
+        zip.file(filename, excelBlob)
+        console.log(`Added ${filename} to ZIP with ${fileMapping.size} hyperlinks`)
+      } else {
+        console.error('Failed to generate Excel file - excelBlob is null')
+        alert('Warning: Excel file could not be exported. The ZIP will contain evidence files only.')
+      }
+
+      // Create README file
+      const readme = `# ${projectName}
+
+## Contents
+- workbook.xlsx: The main spreadsheet with evidence references (Excel-compatible)
+- evidence/: Folder containing all attached evidence files
+
+## Evidence Files
+${fileCounter > 1 ? `This project contains ${fileCounter - 1} evidence files.` : 'No evidence files attached.'}
+
+## Instructions
+1. Extract this ZIP file to a folder
+2. Open workbook.xlsx in Excel or any spreadsheet application
+3. Evidence files are referenced in cells with 📌 markers
+4. View evidence files in the evidence/ folder
+
+## Created
+${new Date().toLocaleString()}
+
+## Created with
+TicknTie - Open source audit evidence management
+https://github.com/yourusername/tickntie
+`
+      zip.file('README.txt', readme)
+
+      // Generate and download the ZIP file
+      const zipBlob = await zip.generateAsync({ type: 'blob' })
+
+      // Create download link
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(zipBlob)
+      link.download = `${projectName}.zip`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(link.href)
+
+      // Show success message
+      this.showExportSuccess(fileCounter - 1)
+
+    } catch (error) {
+      alert('Failed to export project: ' + error.message)
     }
   }
 
-  clearCache() {
-    this.previewCache.clear()
-    console.log('✅ Preview cache cleared')
+  async exportExcelWithHyperlinks(workbook, fileMapping) {
+    try {
+      console.log('Starting Excel export with hyperlinks...')
+
+      // Use SheetJS to create a proper XLSX file
+      const xlsxModule = await import('xlsx')
+      const XLSX = xlsxModule.default || xlsxModule
+      console.log('SheetJS loaded for hyperlink export')
+
+      const sheet = workbook.getActiveSheet()
+      if (!sheet) {
+        console.error('No active sheet found')
+        return null
+      }
+
+      // First, collect all data as before
+      const data = []
+      const maxRow = 100
+      const maxCol = 26
+
+      for (let r = 0; r < maxRow; r++) {
+        const row = []
+        let hasData = false
+        for (let c = 0; c < maxCol; c++) {
+          try {
+            const range = sheet.getRange(r, c)
+            const value = range?.getValue?.() || range?.value || ''
+            row.push(value)
+            if (value) hasData = true
+          } catch (e) {
+            row.push('')
+          }
+        }
+        if (hasData) {
+          data.push(row)
+        }
+      }
+
+      // If no data, at least add headers
+      if (data.length === 0) {
+        data.push(['']) // Add at least one cell
+      }
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet(data)
+
+      // Add hyperlinks to specific cells
+      let hyperlinkCount = 0
+      for (const [cellRef, evidencePath] of fileMapping.entries()) {
+        const linkData = this.cellHyperlinks.get(cellRef)
+        if (linkData) {
+          const displayName = linkData.displayText || 'Evidence'
+
+          // Set the cell to have both value and hyperlink using the cell object format
+          if (ws[cellRef]) {
+            // Create hyperlink using HYPERLINK formula
+            ws[cellRef] = {
+              f: `HYPERLINK("${evidencePath}","📌 ${displayName}")`,
+              v: `📌 ${displayName}`,
+              t: 's'
+            }
+            hyperlinkCount++
+            console.log(`Added hyperlink to cell ${cellRef}: ${evidencePath}`)
+          } else {
+            // Cell doesn't exist in worksheet, need to create it
+            const { row, col } = this.parseCellRef(cellRef)
+            if (row < data.length) {
+              ws[cellRef] = {
+                f: `HYPERLINK("${evidencePath}","📌 ${displayName}")`,
+                v: `📌 ${displayName}`,
+                t: 's'
+              }
+              hyperlinkCount++
+            }
+          }
+        }
+      }
+
+      console.log(`Added ${hyperlinkCount} hyperlinks to worksheet using HYPERLINK formula`)
+
+      // Update the range if we added cells
+      if (!ws['!ref']) {
+        ws['!ref'] = 'A1:Z100'
+      }
+
+      XLSX.utils.book_append_sheet(wb, ws, "Sheet1")
+
+      // Generate XLSX binary string with formulas
+      const xlsxData = XLSX.write(wb, {
+        bookType: 'xlsx',
+        type: 'array',
+        cellFormula: true,
+        bookSST: true
+      })
+      console.log(`Generated XLSX with hyperlinks: ${xlsxData.byteLength} bytes`)
+
+      // Return as blob
+      return new Blob([xlsxData], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    } catch (error) {
+      console.error('Export with hyperlinks failed:', error)
+      // Fall back to regular export
+      return this.exportExcel(workbook)
+    }
   }
+
+  async exportExcel(workbook) {
+    try {
+      console.log('Starting Excel export...')
+      console.log('Workbook object:', workbook)
+      console.log('Workbook methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(workbook || {})))
+
+      // Try to export using Univer API first
+      if (workbook.export) {
+        console.log('Using workbook.export method')
+        return await workbook.export('xlsx')
+      } else if (workbook.saveAsBlob) {
+        console.log('Using workbook.saveAsBlob method')
+        return await workbook.saveAsBlob()
+      } else {
+        console.log('Using SheetJS for XLSX export')
+        // Use SheetJS to create a proper XLSX file
+        const xlsxModule = await import('xlsx')
+        const XLSX = xlsxModule.default || xlsxModule
+        console.log('SheetJS loaded successfully', XLSX)
+
+        const sheet = workbook.getActiveSheet()
+        console.log('Sheet object:', sheet)
+        if (!sheet) {
+          console.error('No active sheet found')
+          return null
+        }
+        console.log('Sheet methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(sheet || {})))
+
+        // Get sheet data
+        const data = []
+        const maxRow = 100 // Limit for export
+        const maxCol = 26 // A-Z columns
+        console.log(`Reading data from sheet (max ${maxRow} rows, ${maxCol} cols)...`)
+
+        // Try different methods to get data
+        try {
+          // Method 1: Using getRange
+          for (let r = 0; r < maxRow; r++) {
+            const row = []
+            let hasData = false
+            for (let c = 0; c < maxCol; c++) {
+              try {
+                const range = sheet.getRange(r, c)
+                const value = range?.getValue?.() || range?.value || ''
+                row.push(value)
+                if (value) hasData = true
+              } catch (e) {
+                row.push('')
+              }
+            }
+            // Only add non-empty rows
+            if (hasData) {
+              data.push(row)
+            }
+          }
+        } catch (error) {
+          console.error('Failed to read sheet data with getRange:', error)
+
+          // Method 2: Try to get all data at once
+          try {
+            const allData = sheet.getDataRange?.()?.getValues?.() ||
+                           sheet.getData?.() ||
+                           sheet.getValues?.()
+            if (allData && Array.isArray(allData)) {
+              data.push(...allData.slice(0, maxRow))
+              console.log('Used alternative method to get sheet data')
+            }
+          } catch (e) {
+            console.error('Alternative method also failed:', e)
+          }
+        }
+
+        console.log(`Collected ${data.length} rows of data`)
+
+        // If no data, at least add headers
+        if (data.length === 0) {
+          console.log('No data found, adding empty row')
+          data.push(['']) // Add at least one cell
+        }
+
+        // Create workbook and worksheet
+        const wb = XLSX.utils.book_new()
+        const ws = XLSX.utils.aoa_to_sheet(data)
+        XLSX.utils.book_append_sheet(wb, ws, "Sheet1")
+        console.log('Created SheetJS workbook')
+
+        // Generate XLSX binary string
+        const xlsxData = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+        console.log(`Generated XLSX data: ${xlsxData.byteLength} bytes`)
+
+        // Return as blob
+        const blob = new Blob([xlsxData], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+        console.log(`Created blob: ${blob.size} bytes`)
+        return blob
+      }
+    } catch (error) {
+      console.error('Export failed with error:', error)
+      console.error('Error stack:', error.stack)
+      // Return null if export fails
+      return null
+    }
+  }
+
+  getFileExtension(dataUrl, displayText) {
+    // Try to get extension from display text first
+    if (displayText) {
+      const match = displayText.match(/\.[^.]+$/)
+      if (match) return match[0]
+    }
+
+    // Fallback to MIME type
+    if (dataUrl.includes('image/jpeg')) return '.jpg'
+    if (dataUrl.includes('image/png')) return '.png'
+    if (dataUrl.includes('image/gif')) return '.gif'
+    if (dataUrl.includes('image/webp')) return '.webp'
+    if (dataUrl.includes('application/pdf')) return '.pdf'
+
+    return '.dat' // Generic extension
+  }
+
+  showExportSuccess(fileCount) {
+    // Create success notification
+    const notification = document.createElement('div')
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #28a745;
+      color: white;
+      padding: 15px 20px;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      z-index: 10001;
+      animation: slideIn 0.3s ease;
+    `
+    notification.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 20px;">✅</span>
+        <div>
+          <div style="font-weight: 600;">Project exported successfully!</div>
+          <div style="font-size: 13px; opacity: 0.9;">${fileCount} evidence file${fileCount !== 1 ? 's' : ''} included</div>
+        </div>
+      </div>
+    `
+
+    // Add slide-in animation
+    const style = document.createElement('style')
+    style.textContent = `
+      @keyframes slideIn {
+        from { transform: translateX(400px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+    `
+    document.head.appendChild(style)
+
+    document.body.appendChild(notification)
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+      notification.style.animation = 'slideIn 0.3s ease reverse'
+      setTimeout(() => {
+        document.body.removeChild(notification)
+        document.head.removeChild(style)
+      }, 300)
+    }, 5000)
+  }
+
+  showImportDialog() {
+    // Create file input for ZIP
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.zip'
+    input.onchange = async (e) => {
+      const file = e.target.files[0]
+      if (file) {
+        await this.importProject(file)
+      }
+    }
+    input.click()
+  }
+
+  async importProject(zipFile) {
+    try {
+      // Show loading indicator
+      const loadingDiv = document.createElement('div')
+      loadingDiv.id = 'importLoading'
+      loadingDiv.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        z-index: 10002;
+        text-align: center;
+      `
+      loadingDiv.innerHTML = `
+        <div class="loading-spinner" style="margin: 0 auto 20px;"></div>
+        <div>Importing project...</div>
+      `
+      document.body.appendChild(loadingDiv)
+
+      // Import JSZip
+      const JSZip = (await import('jszip')).default
+      const zip = await JSZip.loadAsync(zipFile)
+
+      // Clear existing data
+      const confirmClear = confirm('This will replace current spreadsheet data. Continue?')
+      if (!confirmClear) {
+        document.body.removeChild(loadingDiv)
+        return
+      }
+
+      // Clear current hyperlinks
+      this.cellHyperlinks.clear()
+
+      // First, load all evidence files and create a mapping
+      const evidenceMapping = new Map() // filename -> dataUrl
+      const evidenceFolder = zip.folder('evidence')
+      const evidenceFiles = []
+
+      if (evidenceFolder) {
+        evidenceFolder.forEach((relativePath, file) => {
+          if (!file.dir) { // Skip directories
+            evidenceFiles.push({ path: relativePath, file })
+          }
+        })
+
+        // Process each evidence file and store in mapping
+        for (const { path, file } of evidenceFiles) {
+          const blob = await file.async('blob')
+          const dataUrl = await this.blobToDataUrl(blob)
+          const fileName = path.split('/').pop()
+          evidenceMapping.set(fileName, dataUrl)
+        }
+      }
+
+      // Now import the workbook and restore cells with evidence
+      let workbookFile = zip.file('workbook.xlsx') || zip.file('workbook.csv')
+
+      if (workbookFile) {
+        console.log(`Found workbook file: ${workbookFile.name}`)
+
+        if (workbookFile.name.endsWith('.xlsx')) {
+          // Import XLSX using SheetJS
+          const arrayBuffer = await workbookFile.async('arraybuffer')
+          await this.importXLSXWithEvidence(arrayBuffer, evidenceMapping)
+        } else if (workbookFile.name.endsWith('.csv')) {
+          // Fallback to CSV import
+          const content = await workbookFile.async('string')
+          await this.importCSVWithEvidence(content, evidenceMapping)
+        }
+      } else {
+        console.warn('No workbook.xlsx or workbook.csv found in ZIP')
+      }
+
+      // Remove loading indicator
+      document.body.removeChild(loadingDiv)
+
+      // Trigger selection update to refresh sidebar if needed
+      this.detectCurrentSelection()
+
+      // Show success
+      this.showImportSuccess(evidenceFiles.length)
+
+    } catch (error) {
+      // Remove loading if it exists
+      const loading = document.getElementById('importLoading')
+      if (loading) document.body.removeChild(loading)
+
+      alert('Failed to import project: ' + error.message)
+    }
+  }
+
+  async importXLSXWithEvidence(arrayBuffer, evidenceMapping) {
+    try {
+      const xlsxModule = await import('xlsx')
+      const XLSX = xlsxModule.default || xlsxModule
+
+      // Read the XLSX file
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+      const sheetName = workbook.SheetNames[0]
+      const worksheet = workbook.Sheets[sheetName]
+
+      // Convert to array of arrays
+      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
+
+      // Get Univer workbook and sheet
+      const univerWorkbook = this.univerAPI.getActiveWorkbook()
+      if (!univerWorkbook) return
+
+      const sheet = univerWorkbook.getActiveSheet()
+      if (!sheet) return
+
+      // Import data and restore hyperlinks
+      data.forEach((row, rowIndex) => {
+        row.forEach((cellValue, colIndex) => {
+          if (cellValue && cellValue.toString().trim()) {
+            const range = sheet.getRange(rowIndex, colIndex)
+            if (range?.setValue) {
+              const cellStr = cellValue.toString()
+              // Check if this cell contains an evidence reference
+              const evidenceMatch = cellStr.match(/\[\[evidence\/([^\]]+)\]\]/)
+
+              if (evidenceMatch) {
+                const fileName = evidenceMatch[1]
+                const cleanValue = cellStr.replace(/\[\[evidence\/[^\]]+\]\]/, '').trim()
+
+                // Set the cell value without the reference marker
+                range.setValue(cleanValue)
+
+                // If we have this evidence file, restore the hyperlink
+                if (evidenceMapping.has(fileName)) {
+                  const cellRef = this.getCellRef(rowIndex, colIndex)
+                  this.cellHyperlinks.set(cellRef, {
+                    url: evidenceMapping.get(fileName),
+                    displayText: fileName
+                  })
+
+                  console.log(`Restored evidence link for cell ${cellRef}: ${fileName}`)
+                }
+              } else {
+                // Regular cell without evidence
+                range.setValue(cellStr)
+              }
+            }
+          }
+        })
+      })
+
+      console.log(`Imported ${data.length} rows from XLSX with ${this.cellHyperlinks.size} evidence links`)
+    } catch (error) {
+      console.error('XLSX import failed:', error)
+      // Fall back to basic import without evidence restoration
+      throw error
+    }
+  }
+
+  async importCSVWithEvidence(csvContent, evidenceMapping) {
+    // Parse CSV properly handling quotes and commas
+    const rows = []
+    const lines = csvContent.split('\n')
+
+    for (const line of lines) {
+      if (line.trim()) { // Skip empty lines
+        const cells = []
+        let current = ''
+        let inQuotes = false
+
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i]
+          const nextChar = line[i + 1]
+
+          if (char === '"') {
+            if (inQuotes && nextChar === '"') {
+              current += '"'
+              i++ // Skip next quote
+            } else {
+              inQuotes = !inQuotes
+            }
+          } else if (char === ',' && !inQuotes) {
+            cells.push(current)
+            current = ''
+          } else {
+            current += char
+          }
+        }
+        cells.push(current) // Add last cell
+        rows.push(cells)
+      }
+    }
+
+    // Clear existing sheet first
+    const workbook = this.univerAPI.getActiveWorkbook()
+    if (!workbook) return
+
+    const sheet = workbook.getActiveSheet()
+    if (!sheet) return
+
+    // Clear existing content (optional - you might want to keep this)
+    // for (let row = 0; row < 100; row++) {
+    //   for (let col = 0; col < 26; col++) {
+    //     const range = sheet.getRange(row, col)
+    //     if (range?.setValue) {
+    //       range.setValue('')
+    //     }
+    //   }
+    // }
+
+    // Import data and restore hyperlinks
+    rows.forEach((row, rowIndex) => {
+      row.forEach((cellValue, colIndex) => {
+        if (cellValue && cellValue.trim()) {
+          const range = sheet.getRange(rowIndex, colIndex)
+          if (range?.setValue) {
+            // Check if this cell contains an evidence reference
+            const evidenceMatch = cellValue.match(/\[\[evidence\/([^\]]+)\]\]/)
+
+            if (evidenceMatch) {
+              const fileName = evidenceMatch[1]
+              const cleanValue = cellValue.replace(/\[\[evidence\/[^\]]+\]\]/, '').trim()
+
+              // Set the cell value without the reference marker
+              range.setValue(cleanValue)
+
+              // If we have this evidence file, restore the hyperlink
+              if (evidenceMapping.has(fileName)) {
+                const cellRef = this.getCellRef(rowIndex, colIndex)
+                this.cellHyperlinks.set(cellRef, {
+                  url: evidenceMapping.get(fileName),
+                  displayText: fileName
+                })
+
+                console.log(`Restored evidence link for cell ${cellRef}: ${fileName}`)
+              }
+            } else {
+              // Regular cell without evidence
+              range.setValue(cellValue)
+            }
+          }
+        }
+      })
+    })
+
+    console.log(`Imported ${rows.length} rows with ${this.cellHyperlinks.size} evidence links`)
+  }
+
+
+  async blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => resolve(e.target.result)
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  }
+
+  showImportSuccess(fileCount) {
+    const notification = document.createElement('div')
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #17a2b8;
+      color: white;
+      padding: 15px 20px;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      z-index: 10001;
+      animation: slideIn 0.3s ease;
+    `
+    notification.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 20px;">📥</span>
+        <div>
+          <div style="font-weight: 600;">Project imported successfully!</div>
+          <div style="font-size: 13px; opacity: 0.9;">${fileCount} evidence file${fileCount !== 1 ? 's' : ''} restored</div>
+        </div>
+      </div>
+    `
+
+    document.body.appendChild(notification)
+
+    setTimeout(() => {
+      notification.style.animation = 'slideIn 0.3s ease reverse'
+      setTimeout(() => {
+        document.body.removeChild(notification)
+      }, 300)
+    }, 5000)
+  }
+
 }

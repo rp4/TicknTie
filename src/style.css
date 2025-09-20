@@ -161,8 +161,7 @@ body {
 
 
 /* Buttons */
-.btn-primary,
-.btn-danger {
+.btn-primary {
   width: 100%;
   padding: 10px 16px;
   border: none;
@@ -171,9 +170,6 @@ body {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
-}
-
-.btn-primary {
   background: white;
   color: #667eea;
   margin-top: 15px;
@@ -182,16 +178,6 @@ body {
 .btn-primary:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-}
-
-.btn-danger {
-  background: #dc3545;
-  color: white;
-  margin-top: 15px;
-}
-
-.btn-danger:hover {
-  background: #c82333;
 }
 
 /* Image Container */
@@ -259,27 +245,6 @@ body {
   font-weight: 500;
 }
 
-/* Image Details */
-.image-details {
-  background: #f8f9fa;
-  border-radius: 6px;
-  padding: 15px;
-  font-size: 13px;
-}
-
-.detail-row {
-  display: flex;
-  justify-content: space-between;
-  margin: 8px 0;
-}
-
-.detail-row span {
-  color: #6c757d;
-}
-
-.detail-row strong {
-  color: #212529;
-}
 
 /* Resize Handle */
 .sidebar-resize-handle {
