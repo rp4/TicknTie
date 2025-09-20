@@ -4,7 +4,7 @@
  */
 
 import '@univerjs/preset-sheets-core/lib/index.css'
-import { createUniver, defaultTheme, LocaleType, Tools } from '@univerjs/presets'
+import { createUniver, defaultTheme, LocaleType } from '@univerjs/presets'
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core'
 import UniverPresetSheetsCoreEnUS from '@univerjs/preset-sheets-core/lib/locales/en-US.js'
 import { ImagePlugin } from './image-plugin'
@@ -12,19 +12,8 @@ import { ImagePlugin } from './image-plugin'
 // Initialize application
 async function init() {
   try {
-    console.log('🚀 Initializing TicknTie...')
-
-    // Debug locale loading
-    console.log('Loading preset locale...')
-    console.log('Preset locale type:', typeof UniverPresetSheetsCoreEnUS)
-    console.log('Preset locale keys (if object):', UniverPresetSheetsCoreEnUS ? Object.keys(UniverPresetSheetsCoreEnUS).slice(0, 10) : 'Not an object')
-
     // Check if it's a default export
     const locale = UniverPresetSheetsCoreEnUS.default || UniverPresetSheetsCoreEnUS
-    console.log('Using locale:', typeof locale)
-    if (typeof locale === 'object') {
-      console.log('Locale sample keys:', Object.keys(locale).slice(0, 10))
-    }
 
     // Create Univer instance with spreadsheet
     const { univerAPI } = createUniver({
@@ -60,26 +49,19 @@ async function init() {
       if (activeWorkbook) {
         const sheet = activeWorkbook.getActiveSheet()
         if (sheet) {
-          console.log('Sheet initialized successfully')
           // Try to expand the sheet if possible
           const sheetData = sheet.getSheetData?.()
-          if (sheetData) {
-            console.log('Current sheet dimensions:', {
-              rowCount: sheetData.rowCount,
-              columnCount: sheetData.columnCount
-            })
-          }
         }
       }
     } catch (e) {
-      console.log('Could not access sheet data:', e)
+      // Silent error
     }
 
     // Initialize image sidebar plugin
     const imagePlugin = new ImagePlugin(univerAPI)
     await imagePlugin.init()
 
-    console.log('✅ TicknTie ready!')
+    // Application ready
 
     // Make plugin available globally for debugging
     window.ticknTie = {
@@ -88,14 +70,24 @@ async function init() {
     }
 
   } catch (error) {
-    console.error('❌ Failed to initialize TicknTie:', error)
-    document.getElementById('app').innerHTML = `
-      <div style="padding: 40px; text-align: center;">
-        <h2>Failed to initialize application</h2>
-        <p>${error.message}</p>
-        <p>Please refresh the page to try again.</p>
-      </div>
-    `
+    const errorDiv = document.createElement('div')
+    errorDiv.style.padding = '40px'
+    errorDiv.style.textAlign = 'center'
+
+    const errorTitle = document.createElement('h2')
+    errorTitle.textContent = 'Failed to initialize application'
+    errorDiv.appendChild(errorTitle)
+
+    const errorMsg = document.createElement('p')
+    errorMsg.textContent = error.message
+    errorDiv.appendChild(errorMsg)
+
+    const errorHelp = document.createElement('p')
+    errorHelp.textContent = 'Please refresh the page to try again.'
+    errorDiv.appendChild(errorHelp)
+
+    document.getElementById('app').innerHTML = ''
+    document.getElementById('app').appendChild(errorDiv)
   }
 }
 
