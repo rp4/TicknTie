@@ -571,16 +571,20 @@ export class ImagePlugin {
   }
 
   async displayPreview(url, displayText) {
+    console.log(`displayPreview called with displayText: "${displayText}", url length: ${url ? url.length : 'null'}`)
     const container = this.getDOMElement('imageContainer')
 
     // Check cache first
     if (this.previewCache.has(url)) {
+      console.log('Preview found in cache')
       const cached = this.previewCache.get(url)
       // Update access time for LRU
       cached.timestamp = Date.now()
       this.showPreviewContent(cached.preview, url, displayText)
       return
     }
+
+    console.log('Preview not in cache, fetching...')
 
     // Show loading state safely
     const loadingDiv = document.createElement('div')
@@ -615,13 +619,17 @@ export class ImagePlugin {
   }
 
   async fetchPreview(url) {
+    console.log(`fetchPreview called, URL starts with: ${url ? url.substring(0, 50) : 'null'}`)
+
     // Check if it's a data URL
-    if (url.startsWith('data:')) {
+    if (url && url.startsWith('data:')) {
+      console.log('Detected data URL, fetching data URL preview...')
       return await this.fetchDataUrlPreview(url)
     }
 
     // Determine file type from URL
     const fileType = this.getFileType(url)
+    console.log(`File type detected: ${fileType}`)
 
     if (fileType === 'pdf') {
       return await this.fetchPDFPreview(url)
@@ -634,10 +642,13 @@ export class ImagePlugin {
 
   async fetchDataUrlPreview(dataUrl) {
     const isPdf = dataUrl.startsWith('data:application/pdf')
+    console.log(`fetchDataUrlPreview - isPdf: ${isPdf}, data URL start: ${dataUrl.substring(0, 30)}`)
 
     if (isPdf) {
+      console.log('Creating PDF preview from data URL...')
       return this.createPDFPreviewFromDataUrl(dataUrl)
     } else {
+      console.log('Creating image preview from data URL...')
       return this.createImagePreview(dataUrl)
     }
   }
@@ -1952,12 +1963,34 @@ https://github.com/yourusername/tickntie
         })
 
         // Process each evidence file and store in mapping
+        console.log(`Processing ${evidenceFiles.length} evidence files...`)
         for (const { path, file } of evidenceFiles) {
-          const blob = await file.async('blob')
-          const dataUrl = await this.blobToDataUrl(blob)
           const fileName = path.split('/').pop()
+
+          // Get the correct MIME type based on file extension
+          let mimeType = 'application/octet-stream'
+          const ext = fileName.toLowerCase().split('.').pop()
+          if (ext === 'pdf') {
+            mimeType = 'application/pdf'
+          } else if (['jpg', 'jpeg'].includes(ext)) {
+            mimeType = 'image/jpeg'
+          } else if (ext === 'png') {
+            mimeType = 'image/png'
+          } else if (ext === 'gif') {
+            mimeType = 'image/gif'
+          } else if (ext === 'webp') {
+            mimeType = 'image/webp'
+          }
+
+          // Get blob with correct MIME type
+          const blob = await file.async('blob')
+          const correctedBlob = new Blob([blob], { type: mimeType })
+          const dataUrl = await this.blobToDataUrl(correctedBlob)
+
           evidenceMapping.set(fileName, dataUrl)
+          console.log(`Loaded evidence file: ${fileName} (${blob.size} bytes, MIME: ${mimeType}, data URL: ${dataUrl.substring(0, 50)}...)`);
         }
+        console.log(`Evidence mapping contains ${evidenceMapping.size} files`)
       }
 
       // Now import the workbook and restore cells with evidence
@@ -2002,13 +2035,10 @@ https://github.com/yourusername/tickntie
       const xlsxModule = await import('xlsx')
       const XLSX = xlsxModule.default || xlsxModule
 
-      // Read the XLSX file
-      const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+      // Read the XLSX file with formulas to detect hyperlinks
+      const workbook = XLSX.read(arrayBuffer, { type: 'array', cellFormula: true })
       const sheetName = workbook.SheetNames[0]
       const worksheet = workbook.Sheets[sheetName]
-
-      // Convert to array of arrays
-      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
 
       // Get Univer workbook and sheet
       const univerWorkbook = this.univerAPI.getActiveWorkbook()
@@ -2017,46 +2047,90 @@ https://github.com/yourusername/tickntie
       const sheet = univerWorkbook.getActiveSheet()
       if (!sheet) return
 
-      // Import data and restore hyperlinks
-      data.forEach((row, rowIndex) => {
-        row.forEach((cellValue, colIndex) => {
-          if (cellValue && cellValue.toString().trim()) {
-            const range = sheet.getRange(rowIndex, colIndex)
-            if (range?.setValue) {
-              const cellStr = cellValue.toString()
-              // Check if this cell contains an evidence reference
-              const evidenceMatch = cellStr.match(/\[\[evidence\/([^\]]+)\]\]/)
+      // Clear existing content first (optional)
+      this.cellHyperlinks.clear()
 
-              if (evidenceMatch) {
-                const fileName = evidenceMatch[1]
-                const cleanValue = cellStr.replace(/\[\[evidence\/[^\]]+\]\]/, '').trim()
+      // Process each cell in the worksheet
+      const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:Z100')
 
-                // Set the cell value without the reference marker
-                range.setValue(cleanValue)
+      for (let row = range.s.r; row <= range.e.r; row++) {
+        for (let col = range.s.c; col <= range.e.c; col++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
+          const cell = worksheet[cellAddress]
 
-                // If we have this evidence file, restore the hyperlink
-                if (evidenceMapping.has(fileName)) {
-                  const cellRef = this.getCellRef(rowIndex, colIndex)
-                  this.cellHyperlinks.set(cellRef, {
-                    url: evidenceMapping.get(fileName),
-                    displayText: fileName
-                  })
+          if (cell) {
+            const cellRef = this.getCellRef(row, col)
+            const univerRange = sheet.getRange(row, col)
 
-                  console.log(`Restored evidence link for cell ${cellRef}: ${fileName}`)
+            if (univerRange?.setValue) {
+              // Check if cell has a HYPERLINK formula
+              if (cell.f && cell.f.includes('HYPERLINK')) {
+                // Parse HYPERLINK formula: HYPERLINK("evidence/filename.ext","display text")
+                const hyperlinkMatch = cell.f.match(/HYPERLINK\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/i)
+
+                if (hyperlinkMatch) {
+                  const linkPath = hyperlinkMatch[1] // evidence/filename.ext
+                  const displayText = hyperlinkMatch[2] // Display text
+
+                  // Set the cell value to the display text
+                  univerRange.setValue(displayText)
+
+                  // Extract filename from path (evidence/filename.ext -> filename.ext)
+                  const fileName = linkPath.replace(/^evidence[\/\\]/, '')
+
+                  // If we have this evidence file, restore the hyperlink
+                  if (evidenceMapping.has(fileName)) {
+                    // Store the actual data URL and the original filename
+                    this.cellHyperlinks.set(cellRef, {
+                      url: evidenceMapping.get(fileName),  // This should be the data URL
+                      displayText: fileName  // Keep the original filename for reference
+                    })
+
+                    console.log(`Restored hyperlink for cell ${cellRef}: ${fileName} with display "${displayText}"`)
+                    console.log(`Data URL length: ${evidenceMapping.get(fileName).length} chars`)
+                  } else {
+                    console.warn(`Evidence file not found: ${fileName}`)
+                  }
                 }
-              } else {
-                // Regular cell without evidence
-                range.setValue(cellStr)
+              } else if (cell.v) {
+                // Regular cell without hyperlink
+                const cellValue = cell.v.toString()
+
+                // Also check for old-style reference markers [[evidence/...]]
+                const evidenceMatch = cellValue.match(/\[\[evidence\/([^\]]+)\]\]/)
+
+                if (evidenceMatch) {
+                  const fileName = evidenceMatch[1]
+                  const cleanValue = cellValue.replace(/\[\[evidence\/[^\]]+\]\]/, '').trim()
+
+                  univerRange.setValue(cleanValue)
+
+                  if (evidenceMapping.has(fileName)) {
+                    this.cellHyperlinks.set(cellRef, {
+                      url: evidenceMapping.get(fileName),
+                      displayText: fileName
+                    })
+                    console.log(`Restored old-style evidence link for cell ${cellRef}: ${fileName}`)
+                  }
+                } else {
+                  // Regular cell without evidence
+                  univerRange.setValue(cellValue)
+                }
               }
             }
           }
-        })
-      })
+        }
+      }
 
-      console.log(`Imported ${data.length} rows from XLSX with ${this.cellHyperlinks.size} evidence links`)
+      console.log(`Imported XLSX with ${this.cellHyperlinks.size} evidence links restored`)
+
+      // Refresh the sidebar if a cell is currently selected
+      if (this.selectedCell) {
+        this.selectCell(this.selectedCell)
+      }
+
     } catch (error) {
       console.error('XLSX import failed:', error)
-      // Fall back to basic import without evidence restoration
       throw error
     }
   }
