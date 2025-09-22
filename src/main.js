@@ -99,7 +99,7 @@ function init() {
   inject()
 
   const landing = new LandingPage({
-    icon: '📌',
+    icon: '🕵️',
     title: 'Tick-n-Tie',
     subtitle: 'An excel like evidence organization tool with full privacy',
     showInfoButton: true,

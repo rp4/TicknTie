@@ -26,7 +26,10 @@ export class LandingPage {
     const content = document.createElement('div')
     content.className = 'landing-content'
     content.style.cssText = `
-      background: white;
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.3);
       border-radius: 16px;
       padding: 48px;
       max-width: 600px;
@@ -93,9 +96,60 @@ export class LandingPage {
               display: inline-flex;
               align-items: center;
             `
-            infoButton.onmouseover = () => infoButton.style.background = '#f3f4f6'
-            infoButton.onmouseout = () => infoButton.style.background = 'none'
-            infoButton.onclick = () => this.showInfoPopup()
+
+            let popupElement = null
+            let hoverTimeout = null
+            let leaveTimeout = null
+
+            const showPopup = () => {
+              if (!popupElement) {
+                popupElement = this.showInfoPopup(true, infoButton)
+
+                // Allow mouse to move to popup
+                if (popupElement) {
+                  const popupContent = popupElement.querySelector('.info-popup-content')
+                  if (popupContent) {
+                    popupContent.onmouseenter = () => {
+                      if (leaveTimeout) {
+                        clearTimeout(leaveTimeout)
+                        leaveTimeout = null
+                      }
+                    }
+                    popupContent.onmouseleave = () => {
+                      hidePopup()
+                    }
+                  }
+                }
+              }
+            }
+
+            const hidePopup = () => {
+              leaveTimeout = setTimeout(() => {
+                if (popupElement) {
+                  popupElement.remove()
+                  popupElement = null
+                }
+              }, 100)
+            }
+
+            infoButton.onmouseenter = () => {
+              infoButton.style.background = '#f3f4f6'
+              if (leaveTimeout) {
+                clearTimeout(leaveTimeout)
+                leaveTimeout = null
+              }
+              // Small delay to prevent accidental triggers
+              hoverTimeout = setTimeout(showPopup, 200)
+            }
+
+            infoButton.onmouseleave = () => {
+              infoButton.style.background = 'none'
+              if (hoverTimeout) {
+                clearTimeout(hoverTimeout)
+                hoverTimeout = null
+              }
+              hidePopup()
+            }
 
             subtitleContainer.appendChild(infoButton)
 
@@ -138,7 +192,7 @@ export class LandingPage {
           border: 2px solid transparent;
           ${action.variant === 'primary' ?
             'background: #3b82f6; color: white; border-color: #3b82f6;' :
-            'background: white; color: #3b82f6; border-color: #3b82f6;'}
+            'background: rgba(255, 255, 255, 0.8); color: #3b82f6; border-color: #3b82f6;'}
         `
 
         button.onmouseover = () => {
@@ -225,7 +279,7 @@ export class LandingPage {
   }
 
 
-  showInfoPopup() {
+  showInfoPopup(isHover = false) {
     const popup = document.createElement('div')
     popup.style.cssText = `
       position: fixed;
@@ -233,14 +287,16 @@ export class LandingPage {
       left: 0;
       width: 100%;
       height: 100vh;
-      background: rgba(0,0,0,0.5);
+      background: ${isHover ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.5)'};
       display: flex;
       align-items: center;
       justify-content: center;
       z-index: 10001;
+      ${isHover ? 'pointer-events: none;' : ''}
     `
 
     const popupContent = document.createElement('div')
+    popupContent.className = 'info-popup-content'
     popupContent.style.cssText = `
       background: white;
       border-radius: 12px;
@@ -249,6 +305,7 @@ export class LandingPage {
       width: 90%;
       max-height: 80vh;
       overflow-y: auto;
+      ${isHover ? 'pointer-events: auto;' : ''}
     `
 
     // Add popup header
@@ -317,29 +374,35 @@ export class LandingPage {
       })
     }
 
-    // Add close button
-    const closeButton = document.createElement('button')
-    closeButton.textContent = 'Got it'
-    closeButton.style.cssText = `
-      width: 100%;
-      padding: 12px;
-      background: #3b82f6;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      cursor: pointer;
-      margin-top: 24px;
-    `
-    closeButton.onclick = () => popup.remove()
-    popupContent.appendChild(closeButton)
+    // Add close button only if not in hover mode
+    if (!isHover) {
+      const closeButton = document.createElement('button')
+      closeButton.textContent = 'Got it'
+      closeButton.style.cssText = `
+        width: 100%;
+        padding: 12px;
+        background: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        cursor: pointer;
+        margin-top: 24px;
+      `
+      closeButton.onclick = () => popup.remove()
+      popupContent.appendChild(closeButton)
+    }
 
     popup.appendChild(popupContent)
-    popup.onclick = (e) => {
-      if (e.target === popup) popup.remove()
+
+    if (!isHover) {
+      popup.onclick = (e) => {
+        if (e.target === popup) popup.remove()
+      }
     }
 
     document.body.appendChild(popup)
+    return popup
   }
 
   addDragDropSupport(content) {

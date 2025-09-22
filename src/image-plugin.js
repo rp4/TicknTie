@@ -125,15 +125,6 @@ export class ImagePlugin {
     addFileBtn.textContent = '➕ Add Evidence'
     headerDiv.appendChild(addFileBtn)
 
-    // Import project button
-    const importBtn = document.createElement('button')
-    importBtn.id = 'importProjectBtn'
-    importBtn.className = 'btn-primary'
-    importBtn.textContent = '📥 Import Project'
-    importBtn.style.marginTop = '10px'
-    importBtn.onclick = () => this.showImportDialog()
-    headerDiv.appendChild(importBtn)
-
     const contentDiv = document.createElement('div')
     contentDiv.className = 'sidebar-content'
 
