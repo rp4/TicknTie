@@ -242,7 +242,7 @@ export class LandingPage {
     // Add footer links
     if (this.options.footerLinks && this.options.footerLinks.length > 0) {
       const footer = document.createElement('div')
-      footer.style.cssText = 'margin-top: 48px; padding-top: 24px; border-top: 1px solid #e5e7eb; display: flex; gap: 24px; justify-content: center; flex-wrap: wrap;'
+      footer.style.cssText = 'margin-top: 48px; display: flex; gap: 24px; justify-content: center; flex-wrap: wrap;'
 
       this.options.footerLinks.forEach(link => {
         const a = document.createElement('a')
