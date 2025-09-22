@@ -8,7 +8,7 @@ import { createUniver, defaultTheme, LocaleType } from '@univerjs/presets'
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core'
 import UniverPresetSheetsCoreEnUS from '@univerjs/preset-sheets-core/lib/locales/en-US.js'
 import { ImagePlugin } from './image-plugin'
-import { LandingPage } from '../LandingPage.js'
+import { LandingPage } from './LandingPage.js'
 import { inject } from '@vercel/analytics'
 
 // Initialize spreadsheet application
