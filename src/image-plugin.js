@@ -1651,7 +1651,7 @@ ${new Date().toLocaleString()}
 
 ## Created with
 TicknTie - Open source audit evidence management
-https://github.com/rp4/tick_n_tie
+https://github.com/rp4/TicknTie
 `
       zip.file('README.txt', readme)
 

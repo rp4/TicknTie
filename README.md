@@ -4,15 +4,8 @@ An open-source web application for evidence organization using and excel like in
 
 ## Features
 
-- **Excel File Management**: Load, edit, and save Excel files (.xlsx, .xls)
-- **Image Linking**: Attach images to specific cells with URL references instead of embedding
 - **Side Panel Viewer**: View full-resolution images in a dedicated panel
-- **Image Gallery**: Browse all images in your workbook
 - **Zip Bundle Support**: Import/export workbooks with images as zip files
-- **Cell Formatting**: Full support for cell formatting (bold, italic, colors, background colors, alignment)
-- **Multi-line Text**: Support for multi-line cell content with proper export
-- **Multiple Sheets**: Work with multiple worksheets
-- **Keyboard Shortcuts**: Efficient navigation and operations
 - **Browser-Based**: No installation required, runs entirely in your browser
 
 ## Quick Start
@@ -24,7 +17,7 @@ Visit [https://evidence.audittoolbox.com/](https://evidence.audittoolbox.com/)
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/rp4/tick_n_tie.git
+git clone https://github.com/rp4/TicknTie.git
 cd tickntie
 ```
 
@@ -83,24 +76,6 @@ To import zip: Click "Open Zip Bundle" or drag-drop a .zip file
 
 ## Architecture
 
-### Project Structure
-
-```
-TicknTie/
-├── src/
-│   ├── css/
-│   │   └── styles.css          # Application styles
-│   ├── js/
-│   │   ├── app.js              # Main application
-│   │   ├── excel-handler.js    # Excel operations
-│   │   ├── image-manager.js    # Image management
-│   │   ├── ui-components.js    # UI rendering
-│   │   └── zip-handler.js      # Zip operations
-│   └── index.html              # Main HTML file
-├── package.json                # Dependencies
-└── README.md                   # This file
-```
-
 ### Key Technologies
 
 - **Univer**: Modern Excel-like spreadsheet framework
@@ -110,12 +85,6 @@ TicknTie/
 - **Vanilla JavaScript**: No framework dependencies
 
 ## Development
-
-### Prerequisites
-
-- Node.js (v14 or higher)
-- npm or yarn
-- Modern web browser
 
 ### Building from Source
 
@@ -140,13 +109,6 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## Browser Compatibility
-
-- Chrome 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
-
 ## Limitations
 
 - All data is processed client-side (no server required)
@@ -165,16 +127,8 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Acknowledgments
-
-- Built with [Univer](https://univer.ai/)
-- Excel file processing by [ExcelJS](https://github.com/exceljs/exceljs)
-- Zip handling by [JSZip](https://stuk.github.io/jszip/)
-
 ---
 
 <p align="center">
-  Made with ❤️ by AuditToolbox
-  <br>
-  <a href="https://www.audittoolbox.com/">AuditToolbox</a> • 
+  Made with ❤️ by <a href="https://www.audittoolbox.com/">AuditToolbox</a> • 
 </p>
