@@ -1,0 +1,337 @@
+/**
+ * TicknTie - Clean Minimal Styles
+ */
+
+/* Reset & Base */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* App Layout */
+#app {
+  display: flex;
+  height: 100vh;
+}
+
+#spreadsheet {
+  flex: 1;
+  min-width: 0; /* Prevent flex child from overflowing */
+}
+
+#sidebar {
+  width: 350px;
+  min-width: 0;
+  max-width: 800px;
+  background: #f8f9fa;
+  border-left: 1px solid #dee2e6;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  position: relative;
+}
+
+#sidebar.collapsed {
+  width: 40px !important;
+  overflow: hidden;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+#sidebar.collapsed:hover {
+  background: #e9ecef;
+}
+
+#sidebar.collapsed .sidebar-content {
+  display: none;
+}
+
+#sidebar.collapsed .sidebar-header {
+  padding: 10px 5px;
+  background: #667eea;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+#sidebar.collapsed .sidebar-header:hover {
+  background: #5a6fd9;
+}
+
+#sidebar.collapsed .sidebar-header h3 {
+  display: none;
+}
+
+#sidebar.collapsed .btn-primary {
+  display: none;
+}
+
+/* Show just an icon in collapsed state with tooltip */
+#sidebar.collapsed .sidebar-header::after {
+  content: "◀";
+  font-size: 20px;
+  writing-mode: initial;
+  position: relative;
+}
+
+/* Tooltip on hover */
+#sidebar.collapsed:hover::before {
+  content: "Click to expand";
+  position: absolute;
+  left: 45px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* Hide button when sidebar is collapsed - sidebar itself is clickable */
+#sidebar.collapsed ~ .collapse-btn {
+  display: none;
+}
+
+/* Sidebar Header */
+.sidebar-header {
+  padding: 20px;
+  background: #667eea;
+  color: white;
+}
+
+.sidebar-header h3 {
+  margin: 0 0 15px 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* Collapse Button - Left Edge Tab */
+.collapse-btn {
+  position: fixed;
+  right: 350px; /* Position based on sidebar width */
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 80px;
+  background: #667eea;
+  border: none;
+  border-radius: 6px 0 0 6px;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+}
+
+.collapse-btn:hover {
+  background: #5a6fd9;
+  transform: translateY(-50%) translateX(-2px); /* Slide left on hover */
+}
+
+.collapse-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Sidebar Content */
+.sidebar-content {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+
+/* Buttons */
+.btn-primary {
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: white;
+  color: #667eea;
+  margin-top: 15px;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* Image Container */
+.image-container {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  min-height: 200px;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  color: #6c757d;
+  padding: 40px 20px;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 15px;
+  opacity: 0.5;
+}
+
+.empty-state p {
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+.empty-state small {
+  color: #adb5bd;
+  font-size: 12px;
+}
+
+/* Image Preview */
+.image-preview {
+  animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.image-preview img {
+  width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  margin-bottom: 10px;
+}
+
+.pdf-notice {
+  background: #f0f4ff;
+  color: #667eea;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin: 0 0 15px 0;
+  text-align: center;
+  font-weight: 500;
+}
+
+
+/* Resize Handle */
+.sidebar-resize-handle {
+  width: 5px;
+  background: transparent;
+  cursor: ew-resize;
+  position: relative;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+/* Hide resize handle when sidebar is collapsed */
+#sidebar.collapsed ~ .sidebar-resize-handle {
+  display: none;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.resizing {
+  background: #dee2e6;
+}
+
+.sidebar-resize-handle.resizing {
+  background: #667eea;
+}
+
+.resize-grip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 30px;
+  border-radius: 3px;
+  background: #adb5bd;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.sidebar-resize-handle:hover .resize-grip,
+.sidebar-resize-handle.resizing .resize-grip {
+  opacity: 1;
+}
+
+/* Prevent text selection during resize */
+body.resizing {
+  cursor: ew-resize;
+  user-select: none;
+}
+
+body.resizing * {
+  user-select: none;
+}
+
+/* Scrollbar Styles */
+.sidebar-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  #sidebar {
+    width: 300px;
+  }
+}
+
+@media (max-width: 600px) {
+  #app {
+    flex-direction: column;
+  }
+
+  #sidebar {
+    width: 100%;
+    height: 300px;
+    border-left: none;
+    border-top: 1px solid #dee2e6;
+  }
+}
